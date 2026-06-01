@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Digital Portal Proposal | St. Charles School</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #0A3622;
+      --primary-light: #14532D;
+      --accent: #D4AF37;
+      --accent-light: #F3E5AB;
+      --text: #1E293B;
+      --bg: #F8FAFC;
+      --card-bg: #FFFFFF;
+      --border: #E2E8F0;
+      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      color: var(--text);
+      background-color: var(--bg);
+      line-height: 1.6;
+      padding-bottom: 80px;
+    }
+
+    h1, h2, h3, h4, .brand-title {
+      font-family: 'Playfair Display', serif;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Layout Structure: Navigation & Details */
+    .layout-wrapper {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 40px;
+      margin-top: -40px;
+      position: relative;
+      z-index: 20;
+    }
+
+    @media (max-width: 900px) {
+      .layout-wrapper {
+        grid-template-columns: 1fr;
+      }
+      .sidebar {
+        position: static !important;
+        margin-bottom: 20px;
+      }
+    }
+
+    /* Sidebar Navigation */
+    .sidebar {
+      background: var(--card-bg);
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      padding: 24px;
+      box-shadow: var(--shadow);
+      position: sticky;
+      top: 40px;
+      height: fit-content;
+    }
+
+    .sidebar h4 {
+      color: var(--primary);
+      margin-bottom: 16px;
+      font-size: 1.1rem;
+      border-bottom: 2px solid var(--accent);
+      padding-bottom: 8px;
+    }
+
+    .nav-btn {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 12px 16px;
+      margin-bottom: 8px;
+      background: none;
+      border: none;
+      border-radius: 10px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.95rem;
+      font-weight: 500;
+      color: #64748B;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .nav-btn:hover {
+      background: #F1F5F9;
+      color: var(--primary);
+    }
+
+    .nav-btn.active {
+      background: var(--primary);
+      color: white;
+    }
+
+    /* Main Content Details */
+    .content-area {
+      display: flex;
+      flex-direction: column;
+      gap: 40px;
+    }
+
+    .section-card {
+      background: var(--card-bg);
+      border-radius: 24px;
+      border: 1px solid var(--border);
+      padding: 40px;
+      box-shadow: var(--shadow);
+      scroll-margin-top: 40px;
+    }
+
+    .section-card h2 {
+      font-size: 2.2rem;
+      color: var(--primary);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .section-card > p {
+      font-size: 1.1rem;
+      color: #64748B;
+      margin-bottom: 30px;
+      font-weight: 300;
+    }
+
+    /* Custom CSS Mockups for Visual Representation */
+    .device-mockup {
+      background: #0F172A;
+      border: 12px solid #334155;
+      border-radius: 24px;
+      padding: 16px;
+      margin: 30px 0;
+      color: #F8FAFC;
+      font-family: 'Outfit', sans-serif;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    }
+
+    .mockup-header {
+      border-bottom: 1px solid #334155;
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.8rem;
+      color: #94A3B8;
+    }
+
+    .mockup-dot {
+      width: 8px;
+      height: 8px;
+      background: #EF4444;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .mockup-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .mockup-stat {
+      background: #1E293B;
+      padding: 12px;
+      border-radius: 12px;
+      text-align: center;
+      border: 1px solid #334155;
+    }
+
+    .mockup-stat-num {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .mockup-stat-lbl {
+      font-size: 0.7rem;
+      color: #94A3B8;
+    }
+
+    .mockup-list-item {
+      background: #1E293B;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      border-left: 3px solid var(--accent);
+    }
+
+    .mockup-status-green {
+      background: rgba(16, 185, 129, 0.2);
+      color: #10B981;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 0.7rem;
+      font-weight: 600;
+    }
+
+    .mockup-status-yellow {
+      background: rgba(245, 158, 11, 0.2);
+      color: #F59E0B;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 0.7rem;
+      font-weight: 600;
+    }
+
+    .mockup-status-red {
+      background: rgba(239, 68, 68, 0.2);
+      color: #EF4444;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 0.7rem;
+      font-weight: 600;
+    }
+
+    /* Scenario Box */
+    .scenario-box {
+      background: #F0FDF4;
+      border: 1px dashed #BBF7D0;
+      border-radius: 16px;
+      padding: 24px;
+      margin: 24px 0;
+    }
+
+    .scenario-box h4 {
+      color: #166534;
+      font-size: 1.15rem;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .scenario-details {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      font-size: 0.95rem;
+      color: #1E293B;
+    }
+
+    .scenario-step {
+      border-left: 2px solid #86EFAC;
+      padding-left: 12px;
+      margin-left: 6px;
+    }
+
+    .scenario-step strong {
+      color: var(--primary);
+    }
+
+    /* Header & Hero styling */
+    header {
+      background: linear-gradient(135deg, var(--primary) 0%, #021a0f 100%);
+      color: white;
+      padding: 80px 0 100px 0;
+      text-align: center;
+      border-bottom: 5px solid var(--accent);
+      position: relative;
+    }
+
+    header::after {
+      content: '';
+      position: absolute;
+      bottom: -60px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 120%;
+      height: 120px;
+      background-color: var(--bg);
+      border-radius: 50%;
+    }
+
+    .school-logo {
+      font-size: 4rem;
+      margin-bottom: 16px;
+      display: inline-block;
+      animation: float 4s ease-in-out infinite;
+    }
+
+    header h1 {
+      font-size: 3rem;
+      margin-bottom: 12px;
+    }
+
+    header p {
+      font-size: 1.3rem;
+      color: var(--accent-light);
+      max-width: 700px;
+      margin: 0 auto;
+      font-weight: 300;
+    }
+
+    /* Bullet List Features */
+    .feature-points {
+      list-style-type: none;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+      margin: 20px 0;
+    }
+
+    .feature-point-item {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .feature-point-icon {
+      background: rgba(10, 54, 34, 0.08);
+      color: var(--primary);
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      flex-shrink: 0;
+      font-size: 0.85rem;
+    }
+
+    .feature-point-text h5 {
+      font-size: 1.05rem;
+      color: var(--primary);
+      margin-bottom: 4px;
+    }
+
+    .feature-point-text p {
+      font-size: 0.9rem;
+      color: #64748B;
+    }
+
+    /* Client value section */
+    .intro-card {
+      background: var(--card-bg);
+      border-radius: 24px;
+      border: 1px solid var(--border);
+      padding: 40px;
+      text-align: center;
+      box-shadow: var(--shadow);
+      margin-bottom: 40px;
+    }
+
+    .intro-card h2 {
+      font-size: 2.2rem;
+      color: var(--primary);
+      margin-bottom: 16px;
+    }
+
+    .intro-card p {
+      font-size: 1.15rem;
+      color: #64748B;
+      max-width: 800px;
+      margin: 0 auto;
+      font-weight: 300;
+    }
+
+    /* What we can add next cards */
+    .proposal-additions {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 20px;
+      margin-top: 20px;
+    }
+
+    .addition-card {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      background: #FAF8F5;
+      border-left: 4px solid var(--accent);
+    }
+
+    .addition-card h4 {
+      color: var(--primary);
+      font-size: 1.15rem;
+      margin-bottom: 8px;
+    }
+
+    .addition-card p {
+      font-size: 0.9rem;
+      color: #64748B;
+    }
+
+    /* Tri-channel card styles */
+    .channel-box {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+      background: #FAFBFD;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .channel-badge {
+      font-size: 1.8rem;
+      width: 50px;
+      height: 50px;
+      background: white;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+      flex-shrink: 0;
+    }
+
+    .channel-info h5 {
+      font-size: 1rem;
+      color: var(--primary);
+      margin-bottom: 2px;
+    }
+
+    .channel-info p {
+      font-size: 0.85rem;
+      color: #64748B;
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 80px;
+      padding-top: 40px;
+      border-top: 1px solid var(--border);
+    }
+
+    footer p {
+      color: #94A3B8;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="container">
+      <div class="school-logo">🏫</div>
+      <h1>St. Charles School</h1>
+      <p>Custom Digital Portal Proposal — Thika Kiganjo, Kenya</p>
+    </div>
+  </header>
+
+  <main class="container">
+    
+    <!-- Client value intro -->
+    <section class="intro-card">
+      <div class="proposal-badge">Custom System Proposal</div>
+      <h2>Simple, Intelligent, and Completely Connected</h2>
+      <p>
+        We have designed a streamlined school management platform focused strictly on five core modules: 
+        automating teacher timetables, direct parent notifications, structured lesson vaults, twice-daily 
+        attendance synchronization (Morning Check-In and Evening Check-Out), and a private AI study companion for students. 
+        No complex accounting panels, just tools that keep St. Charles School synchronized.
+      </p>
+    </section>
+
+    <!-- Side-by-Side layout Wrapper -->
+    <div class="layout-wrapper">
+      
+      <!-- Sticky Navigation Sidebar -->
+      <nav class="sidebar">
+        <h4>System Sections</h4>
+        <button class="nav-btn active" onclick="scrollToSection('dashboard', this)">1. Admin Dashboard</button>
+        <button class="nav-btn" onclick="scrollToSection('directory', this)">2. Enrolled Directory</button>
+        <button class="nav-btn" onclick="scrollToSection('teacher', this)">3. Teacher Workspace</button>
+        <button class="nav-btn" onclick="scrollToSection('student', this)">4. Student Study Vault</button>
+        <button class="nav-btn" onclick="scrollToSection('timetable', this)">5. Timetables & SMS</button>
+        <button class="nav-btn" onclick="scrollToSection('additions', this)">Future Enhancements</button>
+      </nav>
+
+      <!-- Scrollable Details Content -->
+      <div class="content-area">
+        
+        <!-- Section 1 -->
+        <section id="dashboard" class="section-card">
+          <h2>📊 1. Central Admin Command Dashboard</h2>
+          <p>The administrative headquarter of the school, displaying general metrics, school attendance levels, and timetable statuses.</p>
+          
+          <ul class="feature-points">
+            <li class="feature-point-item">
+              <div class="feature-point-icon">✓</div>
+              <div class="feature-point-text">
+                <h5>Real-Time School Monitor</h5>
+                <p>Instantly see how many students are in the classrooms, how many teachers have logged in, and if there are any upcoming classes without teachers assigned.</p>
+              </div>
+            </li>
+            <li class="feature-point-item">
+              <div class="feature-point-icon">✓</div>
+              <div class="feature-point-text">
+                <h5>Twice-Daily Attendance Monitors</h5>
+                <p>A live notification board showing which teachers have submitted their **Morning Check-In** register (by 8:30 AM) and their **Evening Check-Out** register (by 4:00 PM). Late submissions are highlighted immediately.</p>
+              </div>
+            </li>
+            <li class="feature-point-item">
+              <div class="feature-point-icon">✓</div>
+              <div class="feature-point-text">
+                <h5>Simulation Controls</h5>
+                <p>A visual clock that lets you fast-forward time to watch reminder alerts, daily check-outs, and timetables execute dynamically during a demo.</p>
+              </div>
+            </li>
+          </ul>
+
+          <div class="device-mockup">
+            <div class="mockup-header">
+              <span>ADMIN PORTAL - LIVE MONITOR</span>
+              <span class="mockup-dot"></span>
+            </div>
+            <div class="mockup-grid">
+              <div class="mockup-stat">
+                <span class="mockup-stat-num">482</span>
+                <span class="mockup-stat-lbl">Active Students</span>
+              </div>
+              <div class="mockup-stat">
+                <span class="mockup-stat-num">96%</span>
+                <span class="mockup-stat-lbl">Today's Attendance</span>
+              </div>
+              <div class="mockup-stat">
+                <span class="mockup-stat-num">14/15</span>
+                <span class="mockup-stat-lbl">Registers Logged</span>
+              </div>
+            </div>
+            <div class="mockup-list-item">
+              <span>Teacher Agnes (Grade 7 Science)</span>
+              <span class="mockup-status-green">Morning & Evening Logged</span>
+            </div>
+            <div class="mockup-list-item">
+              <span>Teacher Mark (Grade 8 English)</span>
+              <span class="mockup-status-yellow">Morning Logged, Evening Pending</span>
+            </div>
+            <div class="mockup-list-item" style="border-left-color: #EF4444;">
+              <span>Teacher Beatrice (Grade 9 Pre-Tech)</span>
+              <span class="mockup-status-red">Both Pending</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Section 2 -->
+        <section id="directory" class="section-card">
+          <h2>📂 2. Student & Teacher Directory</h2>
+          <p>A unified digital record-keeper holding all critical profile details in one secure place.</p>
+          
+          <ul class="feature-points">
+            <li class="feature-point-item">
+              <div class="feature-point-icon">✓</div>
+              <div class="feature-point-text">
+                <h5>Searchable Profiles</h5>
+                <p>Type a student or teacher's name to instantly reveal their assigned class, contact details, emergency guardians, and historical attendance rates.</p>
+              </div>
+            </li>
+            <li class="feature-point-item">
+              <div class="feature-point-icon">✓</div>
+              <div class="feature-point-text">
+                <h5>Admissions Helper</h5>
+                <p>Register new incoming students in less than a minute. Specify their assigned stream, parent telephone numbers, and notes.</p>
+              </div>
+            </li>
+          </ul>
+
+          <div class="scenario-box">
+            <h4>💡 Student Directory Verification (Case Scenario)</h4>
+            <div class="scenario-details">
+              <div class="scenario-step">
+                <strong>Step 1: Parent Inquiry</strong><br>
+                A guardian calls the school office to check if their child has settled in on the first day of the term.
+              </div>
+              <div class="scenario-step">
+                <strong>Step 2: Instant Search</strong><br>
+                The secretary types the student's name (e.g., "David Kamau") into the search box.
+              </div>
+              <div class="scenario-step">
+                <strong>Step 3: Verification</strong><br>
+                The system immediately displays David's profile card, showing he is marked present in Class 7A, sits in Room 4, and lists his father's active Safaricom number. The entire verification takes only 5 seconds.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Section 3 -->
+        <section id="teacher" class="section-card">
+          <h2>📥 3. Teacher Workspace & Twice-Daily Attendance</h2>
+          <p>A focused hub designed to help teachers manage their schedules, upload course materials, and log student attendance twice daily.</p>
+          
+          <ul class="feature-points">
+            <li class="feature-point-item">
+              <div class="feature-point-icon">✓</div>
+              <div class="feature-point-text">
+                <h5>Morning Check-In Registry</h5>
+                <p>First thing in the morning (by 8:30 AM), teachers mark their morning registers. This gives the school an instant account of who has arrived safely.</p>
+              </div>
+            </li>
+            <li class="feature-point-item">
+              <div class="feature-point-icon">✓</div>
+              <div class="feature-point-text">
+                <h5>Evening Check-Out Registry</h5>
+                <p>Before leaving the school in the evening (by 4:00 PM), teachers mark their evening registers. This accounts for student safety before they board buses or walk home.</p>
+              </div>
+            </li>
+            <li class="feature-point-item">
+              <div class="feature-point-icon">✓</div>
+              <div class="feature-point-text">
+                <h5>Resource & Notes Publisher</h5>
+                <p>Teachers can upload study notes, classroom slides, past exams, or homework sheets. They simply drag the file, choose the subject (e.g. English), and click publish.</p>
+              </div>
+            </li>
+          </ul>
+
+          <div class="scenario-box">
+            <h4>🏫 The Morning & Evening Attendance Cycle (Case Scenario)</h4>
+            <div class="scenario-details">
+              <div class="scenario-step">
+                <strong>Step 1: Morning Check-In (8:10 AM)</strong><br>
+                Teacher Agnes enters the Grade 7 Science classroom. She opens her portal, clicks "Morning Check-In", marks David present and Joseph absent, and submits. The Admin board immediately registers David's safe arrival.
+              </div>
+              <div class="scenario-step">
+                <strong>Step 2: Classroom Monitoring</strong><br>
+                During the day, David is in class. If any emergency occurs, the office directory confirms David's presence.
+              </div>
+              <div class="scenario-step">
+                <strong>Step 3: Evening Check-Out (3:55 PM)</strong><br>
+                Before classes end, Agnes opens her portal again. The dashboard locks other panels until the "Evening Check-Out" register is submitted. She marks all present students as they board the buses or head home. Once submitted, the Admin panel turns Agnes's icon green, showing 100% attendance tracking compliance.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Section 4 -->
+        <section id="student" class="section-card">
+          <h2>🧠 4. Student Vault & "Charlie" AI Tutor</h2>
+          <p>A distraction-free study portal. Class materials uploaded by teachers are stored here alongside a private tutor.</p>
+          
+          <ul class="feature-points">
+            <li class="feature-point-item">
+              <div class="feature-point-icon">✓</div>
+              <div class="feature-point-text">
+                <h5>Subject-wise Document Locker</h5>
+                <p>Students access their study files sorted by subject. No stress-inducing grade books or payment reminders are visible in this workspace.</p>
+              </div>
+            </li>
+            <li class="feature-point-item">
+              <div class="feature-point-icon">✓</div>
+              <div class="feature-point-text">
+                <h5>"Charlie" AI Assistant</h5>
+                <p>A friendly chat bubble next to the study material. It reads the note content and answers students' questions, explaining complex topics in simple terms.</p>
+              </div>
+            </li>
+            <li class="feature-point-item">
+              <div class="feature-point-icon">✓</div>
+              <div class="feature-point-text">
+                <h5>Talk & Listen Controls</h5>
+                <p>Perfect for younger learners: students can click the microphone, ask their question, and hear the AI tutor read the answer back out loud.</p>
+              </div>
+            </li>
+          </ul>
+
+          <div class="scenario-box" style="background-color: #F0FDFD; border-color: #A5F3FC;">
+            <h4 style="color: #0891B2;">✨ Classroom Study Session with Charlie AI (Case Scenario)</h4>
+            <div class="scenario-details">
+              <div class="scenario-step">
+                <strong>Step 1: Reading Notes</strong><br>
+                Grade 7 student David opens the "Biology: Human Digestive System" handout uploaded by Teacher Agnes.
+              </div>
+              <div class="scenario-step">
+                <strong>Step 2: Asking Questions</strong><br>
+                David clicks the microphone icon and asks: <i>"What does the liver do?"</i>
+              </div>
+              <div class="scenario-step">
+                <strong>Step 3: Contextual Response</strong><br>
+                Charlie AI immediately reads the loaded document and explains aloud: <i>"David, the liver acts like a filtration machine. It cleans out the toxins from your blood so your body stays healthy!"</i> Charlie AI then displays a pop-up quiz on the digestive system for David to practice.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Section 5 -->
+        <section id="timetable" class="section-card">
+          <h2>💬 5. Automated Reminders & Three-Channel Parental Messaging</h2>
+          <p>Aligns school timetables with automated notifications, ensuring teachers are in class and parents are kept updated via WhatsApp, Safaricom SMS, and Email.</p>
+          
+          <div style="margin-bottom: 24px;">
+            <p style="font-weight: 600; color: var(--primary); margin-bottom: 8px;">Direct-to-Parent Triple Pathway:</p>
+            
+            <div class="channel-box">
+              <div class="channel-badge">💬</div>
+              <div class="channel-info">
+                <h5>WhatsApp Delivery</h5>
+                <p>Sends an instant, rich template message straight to the parent's WhatsApp app. It features the school crest, formatted text, and visual ticks showing delivery.</p>
+              </div>
+            </div>
+
+            <div class="channel-box">
+              <div class="channel-badge">📱</div>
+              <div class="channel-info">
+                <h5>Safaricom SMS</h5>
+                <p>Ensures immediate alerts reach parents' phones even when mobile data is switched off, using Safaricom's local carrier network.</p>
+              </div>
+            </div>
+
+            <div class="channel-box">
+              <div class="channel-badge">✉️</div>
+              <div class="channel-info">
+                <h5>Email Delivery</h5>
+                <p>Sends a complete, styled copy of the announcement to the parent's inbox, ideal for long-term records and sharing detailed handouts.</p>
+              </div>
+            </div>
+          </div>
+
+          <ul class="feature-points">
+            <li class="feature-point-item">
+              <div class="feature-point-icon">✓</div>
+              <div class="feature-point-text">
+                <h5>Automated Schedule Reminders</h5>
+                <p>Upload the school's timetable file. The system parses all hours and classrooms. Exactly 5 minutes before any class, a reminder pops up on the assigned teacher's device.</p>
+              </div>
+            </li>
+            <li class="feature-point-item">
+              <div class="feature-point-icon">✓</div>
+              <div class="feature-point-text">
+                <h5>Multi-Channel Broadcaster</h5>
+                <p>Type one announcement, and the system sends it via WhatsApp, SMS, and Email simultaneously with a single click.</p>
+              </div>
+            </li>
+          </ul>
+
+          <div class="scenario-box">
+            <h4>⏰ The 5-Minute Class Warning (Case Scenario)</h4>
+            <div class="scenario-details">
+              <div class="scenario-step">
+                <strong>Step 1: Boundary Watch</strong><br>
+                At 9:55 AM, the system scheduler checks the timetable and notices Grade 7 has a Kiswahili lesson starting at 10:00 AM with Teacher Mark in Room 12.
+              </div>
+              <div class="scenario-step">
+                <strong>Step 2: Alert Dispatch</strong><br>
+                Teacher Mark's smartphone vibrates, showing a push reminder: <i>"Kiswahili Class starting in 5 minutes in Room 12."</i>
+              </div>
+              <div class="scenario-step">
+                <strong>Step 3: Verification</strong><br>
+                Mark receives the warning and walks to Room 12, starting his class exactly on time.
+              </div>
+            </div>
+          </div>
+
+          <div class="scenario-box" style="background-color: #FDF2F8; border-color: #FBCFE8;">
+            <h4 style="color: #9D174D;">📢 Emergency Parent Alert (Case Scenario)</h4>
+            <div class="scenario-details">
+              <div class="scenario-step">
+                <strong>Step 1: Admin Entry</strong><br>
+                Due to weather conditions, the school director decides to release students early. The admin types a broadcast: <i>"Dear parents, school will close early today at 1:00 PM due to local rainfall. Transport buses have departed."</i>
+              </div>
+              <div class="scenario-step">
+                <strong>Step 2: Triple-Channel Dispatch</strong><br>
+                The admin clicks "Send Broadcast". Instantly:
+                <ul>
+                  <li><strong>WhatsApp:</strong> Parent James gets a WhatsApp message with double ticks.</li>
+                  <li><strong>Safaricom SMS:</strong> Parent James's phone rings with an SMS alert (useful if his data is turned off).</li>
+                  <li><strong>Email:</strong> An official email copy is sent to his inbox for confirmation.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- What We Can Add section -->
+        <section id="additions" class="section-card">
+          <h2>🚀 Optional Enhancements We Can Add</h2>
+          <p>These advanced features can be added to make this school portal the absolute best on the market.</p>
+          
+          <div class="proposal-additions">
+            <div class="addition-card">
+              <h4>⚠️ Timetable Conflict Warning</h4>
+              <p>The timetable parser will automatically cross-reference schedules and highlight double-bookings in a glowing gold alert so errors are caught instantly.</p>
+            </div>
+            <div class="addition-card">
+              <h4>🎙️ AI Daily Summaries</h4>
+              <p>Generates a short daily audio briefing of today's notes that students can play back in their locker, helping with revision.</p>
+            </div>
+            <div class="addition-card">
+              <h4>🔄 Smart SMS Auto-Retry</h4>
+              <p>If a parent's number is out of range, the broadcast engine automatically queues and retries delivery later, sending you a notification report.</p>
+            </div>
+          </div>
+        </section>
+
+      </div>
+      
+    </div>
+
+    <footer>
+      <p>&copy; 2026 St. Charles School Management System. Custom-crafted for Thika Kiganjo.</p>
+    </footer>
+
+  </main>
+
+  <script>
+    function scrollToSection(sectionId, btn) {
+      // Scroll to view
+      const el = document.getElementById(sectionId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+      }
+
+      // Update active nav button
+      const btns = document.querySelectorAll('.nav-btn');
+      btns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    }
+
+    // Scroll spy to update nav buttons
+    window.addEventListener('scroll', () => {
+      const sections = ['dashboard', 'directory', 'teacher', 'student', 'timetable', 'additions'];
+      let currentSection = '';
+
+      for (let s of sections) {
+        const el = document.getElementById(s);
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          if (rect.top <= 120) {
+            currentSection = s;
+          }
+        }
+      }
+
+      if (currentSection) {
+        const btns = document.querySelectorAll('.nav-btn');
+        btns.forEach(btn => {
+          if (btn.getAttribute('onclick').includes(currentSection)) {
+            btn.classList.add('active');
+          } else {
+            btn.classList.remove('active');
+          }
+        });
+      }
+    });
+  </script>
+</body>
+</html>

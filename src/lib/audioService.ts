@@ -1,0 +1,175 @@
+let audioCtx: AudioContext | null = null;
+
+function getAudioContext() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+  }
+  return audioCtx;
+}
+
+/**
+ * Synthesizes a high-fidelity school bell ring using the Web Audio API.
+ */
+export function playSchoolBell(): void {
+  try {
+    const ctx = getAudioContext();
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
+    
+    const now = ctx.currentTime;
+    
+    // Play multiple overlapping oscillators to simulate a metallic bell clang
+    const frequencies = [440, 554.37, 659.25, 880];
+    
+    frequencies.forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      
+      osc.type = idx % 2 === 0 ? 'sine' : 'triangle';
+      osc.frequency.setValueAtTime(freq, now);
+      
+      // School bell ring pattern (vibrato)
+      osc.frequency.linearRampToValueAtTime(freq + 5, now + 0.1);
+      osc.frequency.linearRampToValueAtTime(freq - 5, now + 0.2);
+      osc.frequency.linearRampToValueAtTime(freq + 5, now + 0.3);
+      osc.frequency.linearRampToValueAtTime(freq - 5, now + 0.4);
+      osc.frequency.linearRampToValueAtTime(freq, now + 0.5);
+
+      gainNode.gain.setValueAtTime(0, now);
+      gainNode.gain.linearRampToValueAtTime(0.15, now + 0.05);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 1.8);
+      
+      osc.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      
+      osc.start(now);
+      osc.stop(now + 2);
+    });
+
+    triggerHapticVibration();
+  } catch (err) {
+    console.warn('Web Audio API not supported or blocked:', err);
+  }
+}
+
+/**
+ * Synthesizes a gentle warning double-chime for text alerts or late register warnings.
+ */
+export function playWarningChime(): void {
+  try {
+    const ctx = getAudioContext();
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
+    
+    const now = ctx.currentTime;
+    
+    // Tone 1
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.frequency.setValueAtTime(880, now); // A5
+    gain1.gain.setValueAtTime(0, now);
+    gain1.gain.linearRampToValueAtTime(0.1, now + 0.05);
+    gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.3);
+    
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start(now);
+    osc1.stop(now + 0.3);
+    
+    // Tone 2 (pitched up)
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.frequency.setValueAtTime(1046.50, now + 0.15); // C6
+    gain2.gain.setValueAtTime(0, now + 0.15);
+    gain2.gain.linearRampToValueAtTime(0.1, now + 0.2);
+    gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.55);
+    
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(now + 0.15);
+    osc2.stop(now + 0.6);
+
+    triggerHapticVibration([50, 50, 100]);
+  } catch (err) {
+    console.warn('Web Audio API blocked or not supported:', err);
+  }
+}
+
+/**
+ * Invokes device-level haptic vibration if supported.
+ */
+export function triggerHapticVibration(pattern: number[] = [100, 50, 100]): void {
+  if ('vibrate' in navigator) {
+    navigator.vibrate(pattern);
+  }
+  
+  // Screen shake representation
+  const mainWrapper = document.getElementById('app');
+  if (mainWrapper) {
+    mainWrapper.classList.add('shake-device');
+    setTimeout(() => {
+      mainWrapper.classList.remove('shake-device');
+    }, 500);
+  }
+}
+
+/**
+ * Synthesizes speech using Web Speech API for Charlie AI Tutor.
+ */
+let currentUtterance: SpeechSynthesisUtterance | null = null;
+
+export function speakText(text: string, onEnd?: () => void): void {
+  try {
+    stopSpeaking();
+    
+    if (!('speechSynthesis' in window)) {
+      console.warn('Speech synthesis not supported in this browser.');
+      if (onEnd) onEnd();
+      return;
+    }
+    
+    // Clean markdown formatting if present
+    const cleanText = text.replace(/[*#`_\-]/g, '').replace(/\[.*?\]\(.*?\)/g, '');
+    
+    currentUtterance = new SpeechSynthesisUtterance(cleanText);
+    
+    // Set a premium voice if possible
+    const voices = window.speechSynthesis.getVoices();
+    const englishVoice = voices.find(voice => 
+      voice.lang.includes('en-GB') || 
+      voice.lang.includes('en-US') || 
+      voice.lang.includes('en-KE')
+    );
+    if (englishVoice) {
+      currentUtterance.voice = englishVoice;
+    }
+    
+    currentUtterance.rate = 1.0;
+    currentUtterance.pitch = 1.1; // Friendly higher pitch
+    
+    currentUtterance.onend = () => {
+      currentUtterance = null;
+      if (onEnd) onEnd();
+    };
+    
+    currentUtterance.onerror = (e) => {
+      console.error('Speech synthesis error:', e);
+      currentUtterance = null;
+      if (onEnd) onEnd();
+    };
+    
+    window.speechSynthesis.speak(currentUtterance);
+  } catch (err) {
+    console.error('Speech Synthesis failed:', err);
+    if (onEnd) onEnd();
+  }
+}
+
+export function stopSpeaking(): void {
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+  }
+  currentUtterance = null;
+}

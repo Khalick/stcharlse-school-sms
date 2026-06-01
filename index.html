@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>St. Charles School | Digital Management Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,400&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- Header Bar -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="brand-section">
+        <img src="/school_crest_logo.png" class="school-crest-img" alt="St. Charles Crest" style="height: 52px; width: auto; object-fit: contain;">
+        <div class="brand-text">
+          <h1>St. Charles School</h1>
+          <p>Thika Kiganjo, Kenya</p>
+        </div>
+      </div>
+      
+      <!-- Session Actions Badge -->
+      <div id="auth-header-actions" class="auth-actions-group">
+        <!-- Injected dynamically by main.ts -->
+      </div>
+    </div>
+  </header>
+
+  <!-- App Wrapper for content -->
+  <div id="app" class="main-layout container">
+    <main id="portal-content">
+      <!-- Injected by router -->
+    </main>
+  </div>
+
+  <!-- Simulated Clock & Control Panel -->
+  <div id="simulator-bar"></div>
+
+  <!-- Notification Toast Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Router script -->
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

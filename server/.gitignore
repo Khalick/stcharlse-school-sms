@@ -1,0 +1,15 @@
+# Server Dependency Packages
+node_modules/
+
+# Compiled JavaScript Build Outputs
+dist/
+build/
+out/
+
+# Environment configurations
+.env
+.env.local
+
+# Logs
+logs/
+*.log
