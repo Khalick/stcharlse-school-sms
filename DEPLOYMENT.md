@@ -37,27 +37,26 @@ git push -u origin main
 ---
 
 ## 3. Deploying the Backend Server (e.g. Render / Heroku)
-Deploy the server backend folder `/server` to any Node hosting provider.
+Since we have integrated Vercel Serverless Functions, you can deploy **both the frontend and backend together on Vercel** under the same domain.
 
-### Staging Environment Variables:
-Configure these environment variables in your server's hosting settings:
-- `PORT` = `3001`
-- `JWT_SECRET` = `stcharles_jwt_private_key_2026` (Use a strong unique string)
-- `DATABASE_URL` = (Your Supabase PostgreSQL Connection String, which you copy from your Supabase Project Settings -> Database -> Connection string -> URI)
+### Required Environment Variables in Vercel:
+Configure these environment variables in your Vercel Project Settings:
+- `GROQ_API_KEY`: `your_groq_api_key_here` (To power Llama 3 AI timetable parsing and student chat)
+- `JWT_SECRET`: `stcharles_jwt_private_key_2026` (Or any strong unique custom string to sign session security tokens)
+- `VITE_API_URL`: (Optional) Leave this blank to automatically route all API requests to the bundled Vercel Serverless Function, or set it to an external backend if desired.
 
 ---
 
-## 4. Deploying the Frontend to Vercel
+## 4. Deploying to Vercel
 1. Log in to [Vercel](https://vercel.com/) and click **Add New Project**.
 2. Select your imported **st-charles-sms** GitHub repository.
 3. Configure the project settings:
    - **Framework Preset**: `Vite`
-   - **Root Directory**: `./` (Root directory, as index.html is in the root workspace folder)
+   - **Root Directory**: `./` (Keep as the root of the repository)
    - **Build Command**: `npm run build`
    - **Output Directory**: `dist`
-   - **Environment Variables**:
-     - `VITE_API_URL`: your deployed backend server root URL (e.g. `https://st-charles-api.onrender.com`). If not set, it defaults to `http://localhost:3001` for local execution.
+   - **Environment Variables**: Add `GROQ_API_KEY` and `JWT_SECRET` as defined above.
 4. Click **Deploy**!
 
-Your stunning Ivy League digital management campus will be live and active on the web in seconds!
+Your stunning Ivy League digital management campus and server backend will be live and active on the web in seconds!
 

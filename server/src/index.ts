@@ -62,9 +62,13 @@ app.get('/health', (req, res) => {
 });
 
 // Bootstrap listener
-app.listen(PORT, () => {
-  console.log(`====================================================`);
-  console.log(`🎓 ST. CHARLES SCHOOL DIGITAL BACKEND IS ACTIVE    `);
-  console.log(`📶 Server environment listening on http://localhost:${PORT}`);
-  console.log(`====================================================`);
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`====================================================`);
+    console.log(`🎓 ST. CHARLES SCHOOL DIGITAL BACKEND IS ACTIVE    `);
+    console.log(`📶 Server environment listening on http://localhost:${PORT}`);
+    console.log(`====================================================`);
+  });
+}
+
+export default app;

@@ -3,15 +3,42 @@ import type { Database as SqliteDatabase } from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+import fs from 'fs';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Initialize DB inside server workspace
-const dbPath = path.resolve(__dirname, '../../stcharles.db');
+// Initialize DB inside server workspace or Vercel temp space
+let dbPath = '';
+if (process.env.VERCEL) {
+  const bundledDbPath = path.join(process.cwd(), 'stcharles.db');
+  const tempDbPath = '/tmp/stcharles.db';
+  
+  if (!fs.existsSync(tempDbPath)) {
+    try {
+      if (fs.existsSync(bundledDbPath)) {
+        fs.copyFileSync(bundledDbPath, tempDbPath);
+        console.log('Successfully copied stcharles.db to /tmp/stcharles.db');
+      } else {
+        fs.writeFileSync(tempDbPath, '');
+        console.log('Created empty db in /tmp/stcharles.db');
+      }
+    } catch (e) {
+      console.error('Failed to copy database to /tmp:', e);
+    }
+  }
+  dbPath = tempDbPath;
+} else {
+  dbPath = path.resolve(__dirname, '../../stcharles.db');
+}
+
 export const db: SqliteDatabase = new Database(dbPath);
 
 // Configure WAL mode for efficient concurrent reads/writes
-db.pragma('journal_mode = WAL');
+// Skip WAL on Vercel's ephemeral mount to avoid SQLite lock errors
+if (!process.env.VERCEL) {
+  db.pragma('journal_mode = WAL');
+}
 
 export function initDb(): void {
   // 1. Teachers
