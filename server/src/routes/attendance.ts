@@ -34,9 +34,9 @@ router.get('/today', authenticateToken, async (req: AuthRequest, res: Response):
       morning: morningReg ? { submittedAt: morningReg.submitted_at } : null,
       evening: eveningReg ? { submittedAt: eveningReg.submitted_at } : null
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching today register state:', error);
-    res.status(500).json({ error: 'Failed to retrieve register submission state.' });
+    res.status(500).json({ error: 'Failed to retrieve register submission state: ' + error.message });
   }
 });
 
@@ -127,9 +127,9 @@ router.get('/rates', authenticateToken, async (req: AuthRequest, res: Response):
     });
 
     res.json(result);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching attendance rates:', error);
-    res.status(500).json({ error: 'Failed to compute student attendance rates.' });
+    res.status(500).json({ error: 'Failed to compute student attendance rates: ' + error.message });
   }
 });
 

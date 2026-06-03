@@ -88,7 +88,7 @@ router.get('/registers-summary', async (req: AuthRequest, res: Response) => {
 
     res.json(formatted);
   } catch (error: any) {
-    res.status(500).json({ error: 'Failed to query teachers register summary.' });
+    res.status(500).json({ error: 'Failed to query teachers register summary: ' + error.message });
   }
 });
 
@@ -103,8 +103,8 @@ router.get('/timetable', async (req: AuthRequest, res: Response) => {
     `;
 
     res.json(events);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to query scheduling timeline.' });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to query scheduling timeline: ' + error.message });
   }
 });
 
