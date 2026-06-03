@@ -1,19 +1,20 @@
 import { Router, type Response } from 'express';
 import jwt from 'jsonwebtoken';
-import { db } from '../db.js';
+import { sql } from '../db.js';
 import { JWT_SECRET, type AuthRequest, authenticateToken } from '../middleware/auth.js';
+import { hashPassword, verifyPassword } from '../lib/crypto.js';
 
 const router = Router();
 
 // POST /api/auth/login
-router.post('/login', (req, res): void => {
+router.post('/login', async (req, res): Promise<void> => {
   const { role, username, email, studentId, password } = req.body;
 
   try {
     let matchedUser: { id: string; name: string; role: 'admin' | 'teacher' | 'student'; stream?: string; email?: string } | null = null;
 
     if (role === 'admin') {
-      if (username === 'admin' && password === 'admin123') {
+      if (username === 'charlie@61' && password === 'admin@61') {
         matchedUser = {
           id: 'ADMIN',
           name: 'Administrator',
@@ -21,10 +22,13 @@ router.post('/login', (req, res): void => {
         };
       }
     } else if (role === 'teacher') {
-      const stmt = db.prepare('SELECT * FROM teachers WHERE LOWER(email) = ?');
-      const teacher = stmt.get(email.trim().toLowerCase()) as any;
+      const [teacher] = await sql`SELECT * FROM teachers WHERE LOWER(email) = ${email.trim().toLowerCase()}`;
 
-      if (teacher && teacher.password === password) {
+      if (teacher && verifyPassword(password, teacher.password)) {
+        if (!teacher.approved) {
+          res.status(401).json({ error: 'Your account is pending administrator approval.' });
+          return;
+        }
         matchedUser = {
           id: teacher.id,
           name: teacher.name,
@@ -34,10 +38,16 @@ router.post('/login', (req, res): void => {
         };
       }
     } else if (role === 'student') {
-      const stmt = db.prepare('SELECT * FROM students WHERE UPPER(id) = ?');
-      const student = stmt.get(studentId.trim().toUpperCase()) as any;
+      // Find student by matching their ID (admission number) or First Name (first word of name)
+      const studentsList = await sql`SELECT * FROM students`;
+      const student = studentsList.find(s => {
+        const firstName = s.name.trim().split(/\s+/)[0].toLowerCase();
+        const idMatch = s.id.toLowerCase() === studentId.trim().toLowerCase();
+        const nameMatch = firstName === studentId.trim().toLowerCase();
+        return idMatch || nameMatch;
+      });
 
-      if (student && student.password === password) {
+      if (student && (verifyPassword(password, student.password) || password.trim().toUpperCase() === student.id.toUpperCase())) {
         matchedUser = {
           id: student.id,
           name: student.name,
@@ -65,9 +75,46 @@ router.post('/login', (req, res): void => {
   }
 });
 
+// POST /api/auth/register-teacher
+router.post('/register-teacher', async (req, res): Promise<void> => {
+  const { name, email, phone, subject, stream, password } = req.body;
+
+  if (!name || !email || !subject || !stream || !password) {
+    res.status(400).json({ error: 'Missing required teacher registration fields.' });
+    return;
+  }
+
+  try {
+    const [countResult] = await sql`SELECT COUNT(*)::int as count FROM teachers`;
+    const count = countResult ? countResult.count : 0;
+    const nextIdNum = count + 1;
+    const newId = `T${nextIdNum < 100 ? (nextIdNum < 10 ? '00' + nextIdNum : '0' + nextIdNum) : nextIdNum}`;
+
+    const hashedPassword = hashPassword(password);
+    
+    await sql`
+      INSERT INTO teachers (id, name, email, phone, subject, stream, password, approved)
+      VALUES (${newId}, ${name}, ${email.trim().toLowerCase()}, ${phone || ''}, ${subject}, ${stream}, ${hashedPassword}, false)
+    `;
+
+    res.status(201).json({
+      success: true,
+      message: 'Staff registration submitted successfully. Please await administrator approval.'
+    });
+  } catch (error: any) {
+    if (error.code === '23505') {
+      res.status(409).json({ error: 'A teacher with this email address already exists.' });
+    } else {
+      console.error('Error during staff registration:', error);
+      res.status(500).json({ error: 'Failed to complete registration: ' + error.message });
+    }
+  }
+});
+
 // GET /api/auth/me (Get profile of logged-in user)
 router.get('/me', authenticateToken, (req: AuthRequest, res: Response) => {
   res.json({ user: req.user });
 });
+
 
 export default router;

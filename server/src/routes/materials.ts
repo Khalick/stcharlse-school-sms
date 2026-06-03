@@ -1,17 +1,17 @@
 import { Router, type Response } from 'express';
-import { db } from '../db.js';
+import { sql } from '../db.js';
 import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
 
 // GET /api/materials - Get study materials (filtered by authorId or grade)
-router.get('/', authenticateToken, (req: AuthRequest, res: Response) => {
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   const { authorId, grade } = req.query;
 
   try {
     let materials: any[] = [];
-    let targetGrade = grade;
-    let targetAuthorId = authorId;
+    let targetGrade = grade as string | undefined;
+    let targetAuthorId = authorId as string | undefined;
 
     if (req.user?.role === 'student') {
       // Force students to only fetch materials of their own class grade stream
@@ -20,31 +20,28 @@ router.get('/', authenticateToken, (req: AuthRequest, res: Response) => {
     }
 
     if (targetAuthorId) {
-      const stmt = db.prepare(`
+      materials = await sql`
         SELECT m.*, t.name as author_name 
         FROM study_materials m
         JOIN teachers t ON m.author_id = t.id
-        WHERE m.author_id = ?
+        WHERE m.author_id = ${targetAuthorId}
         ORDER BY m.created_at DESC
-      `);
-      materials = stmt.all(targetAuthorId);
+      `;
     } else if (targetGrade) {
-      const stmt = db.prepare(`
+      materials = await sql`
         SELECT m.*, t.name as author_name 
         FROM study_materials m
         JOIN teachers t ON m.author_id = t.id
-        WHERE m.grade = ?
+        WHERE m.grade = ${targetGrade}
         ORDER BY m.created_at DESC
-      `);
-      materials = stmt.all(targetGrade);
+      `;
     } else {
-      const stmt = db.prepare(`
+      materials = await sql`
         SELECT m.*, t.name as author_name 
         FROM study_materials m
         JOIN teachers t ON m.author_id = t.id
         ORDER BY m.created_at DESC
-      `);
-      materials = stmt.all();
+      `;
     }
 
     // Map DB column schema to frontend StudyMaterial interface fields
@@ -65,7 +62,7 @@ router.get('/', authenticateToken, (req: AuthRequest, res: Response) => {
 });
 
 // POST /api/materials - Publish new document resource
-router.post('/', authenticateToken, (req: AuthRequest, res: Response): void => {
+router.post('/', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   const { title, subject, grade, authorId, content } = req.body;
 
   if (req.user?.role !== 'admin' && !(req.user?.role === 'teacher' && req.user?.id === authorId)) {
@@ -80,21 +77,18 @@ router.post('/', authenticateToken, (req: AuthRequest, res: Response): void => {
 
   try {
     // Check total materials count to auto increment ID
-    const countStmt = db.prepare('SELECT COUNT(*) as count FROM study_materials');
-    const { count } = countStmt.get() as { count: number };
+    const [countResult] = await sql`SELECT COUNT(*)::int as count FROM study_materials`;
+    const count = countResult ? countResult.count : 0;
     const nextIdNum = count + 1;
     const newId = `M${nextIdNum < 100 ? (nextIdNum < 10 ? '0' + nextIdNum : '0' + nextIdNum) : nextIdNum}`;
 
-    const insertStmt = db.prepare(`
+    await sql`
       INSERT INTO study_materials (id, title, subject, grade, author_id, content)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `);
-
-    insertStmt.run(newId, title, subject, grade, authorId, content);
+      VALUES (${newId}, ${title}, ${subject}, ${grade}, ${authorId}, ${content})
+    `;
 
     // Fetch newly created document to confirm
-    const teacherStmt = db.prepare('SELECT name FROM teachers WHERE id = ?');
-    const teacher = teacherStmt.get(authorId) as { name: string };
+    const [teacher] = await sql`SELECT name FROM teachers WHERE id = ${authorId}`;
 
     res.status(201).json({
       success: true,
@@ -114,12 +108,11 @@ router.post('/', authenticateToken, (req: AuthRequest, res: Response): void => {
 });
 
 // DELETE /api/materials/:id - Delete a study material (admin or authoring teacher)
-router.delete('/:id', authenticateToken, (req: AuthRequest, res: Response): void => {
+router.delete('/:id', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
 
   try {
-    const existsStmt = db.prepare('SELECT id, author_id FROM study_materials WHERE id = ?');
-    const material = existsStmt.get(id) as { id: string; author_id: string } | undefined;
+    const [material] = await sql`SELECT id, author_id FROM study_materials WHERE id = ${id}`;
 
     if (!material) {
       res.status(404).json({ error: 'Study material not found.' });
@@ -132,8 +125,7 @@ router.delete('/:id', authenticateToken, (req: AuthRequest, res: Response): void
       return;
     }
 
-    const deleteStmt = db.prepare('DELETE FROM study_materials WHERE id = ?');
-    deleteStmt.run(id);
+    await sql`DELETE FROM study_materials WHERE id = ${id}`;
 
     res.json({ success: true, message: `Material ${id} deleted.` });
   } catch (error: any) {

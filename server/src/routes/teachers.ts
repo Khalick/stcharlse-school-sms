@@ -1,19 +1,20 @@
 import { Router, type Response } from 'express';
-import { db } from '../db.js';
+import { sql } from '../db.js';
 import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
+import { hashPassword } from '../lib/crypto.js';
+
 
 const router = Router();
 
 // GET /api/teachers - List all teachers for switcher select dropdown
-router.get('/', authenticateToken, (req: AuthRequest, res: Response): void => {
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   if (req.user?.role === 'student') {
     res.status(403).json({ error: 'Access Denied: Students are not authorized to view the teacher directory.' });
     return;
   }
 
   try {
-    const stmt = db.prepare('SELECT id, name, email, phone, subject, stream FROM teachers');
-    const teachers = stmt.all();
+    const teachers = await sql`SELECT id, name, email, phone, subject, stream, approved FROM teachers`;
     res.json(teachers);
   } catch (error) {
     res.status(500).json({ error: 'Failed to retrieve teacher directory.' });
@@ -21,7 +22,7 @@ router.get('/', authenticateToken, (req: AuthRequest, res: Response): void => {
 });
 
 // GET /api/teachers/:id/students - List students in teacher's assigned stream (with dynamically computed attendance rates)
-router.get('/:id/students', authenticateToken, (req: AuthRequest, res: Response): void => {
+router.get('/:id/students', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
 
   if (req.user?.role !== 'admin' && !(req.user?.role === 'teacher' && req.user?.id === id)) {
@@ -31,8 +32,7 @@ router.get('/:id/students', authenticateToken, (req: AuthRequest, res: Response)
 
   try {
     // 1. Get teacher stream
-    const teacherStmt = db.prepare('SELECT stream FROM teachers WHERE id = ?');
-    const teacher = teacherStmt.get(id) as { stream: string } | undefined;
+    const [teacher] = await sql`SELECT stream FROM teachers WHERE id = ${id}`;
 
     if (!teacher) {
       res.status(404).json({ error: 'Teacher not found.' });
@@ -40,7 +40,8 @@ router.get('/:id/students', authenticateToken, (req: AuthRequest, res: Response)
     }
 
     // 2. Fetch all students in teacher's stream and compute attendance rate dynamically
-    const studentsStmt = db.prepare(`
+    // Use ::int casts for Postgres aggregation counts
+    const students = await sql`
       SELECT 
         s.id,
         s.name,
@@ -48,16 +49,14 @@ router.get('/:id/students', authenticateToken, (req: AuthRequest, res: Response)
         s.guardian_name,
         s.guardian_phone,
         s.guardian_email,
-        COUNT(reg.id) as total_sessions,
-        SUM(CASE WHEN r.status = 'present' THEN 1 ELSE 0 END) as present_sessions
+        COUNT(reg.id)::int as total_sessions,
+        SUM(CASE WHEN r.status = 'present' THEN 1 ELSE 0 END)::int as present_sessions
       FROM students s
       LEFT JOIN attendance_records r ON s.id = r.student_id
       LEFT JOIN attendance_registers reg ON r.register_id = reg.id AND reg.session = 'morning'
-      WHERE s.stream = ?
-      GROUP BY s.id
-    `);
-
-    const students = studentsStmt.all(teacher.stream) as any[];
+      WHERE s.stream = ${teacher.stream}
+      GROUP BY s.id, s.name, s.stream, s.guardian_name, s.guardian_phone, s.guardian_email
+    `;
 
     // 3. Inject original baseline history (20 days, 19 present) so initial load matches mock rates
     const formattedStudents = students.map(s => {
@@ -82,7 +81,7 @@ router.get('/:id/students', authenticateToken, (req: AuthRequest, res: Response)
 });
 
 // POST /api/teachers - Create a new teacher (admin only)
-router.post('/', authenticateToken, (req: AuthRequest, res: Response): void => {
+router.post('/', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   if (req.user?.role !== 'admin') {
     res.status(403).json({ error: 'Access Denied: Only administrators can create teacher accounts.' });
     return;
@@ -96,24 +95,24 @@ router.post('/', authenticateToken, (req: AuthRequest, res: Response): void => {
   }
 
   try {
-    const countStmt = db.prepare('SELECT COUNT(*) as count FROM teachers');
-    const { count } = countStmt.get() as { count: number };
+    const [countResult] = await sql`SELECT COUNT(*)::int as count FROM teachers`;
+    const count = countResult ? countResult.count : 0;
     const nextIdNum = count + 1;
     const newId = `T${nextIdNum < 100 ? (nextIdNum < 10 ? '00' + nextIdNum : '0' + nextIdNum) : nextIdNum}`;
 
-    const insertStmt = db.prepare(`
-      INSERT INTO teachers (id, name, email, phone, subject, stream, password)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
+    const hashedPassword = hashPassword('teacher123');
+    await sql`
+      INSERT INTO teachers (id, name, email, phone, subject, stream, password, approved)
+      VALUES (${newId}, ${name}, ${email.trim().toLowerCase()}, ${phone || ''}, ${subject}, ${stream}, ${hashedPassword}, true)
+    `;
 
-    insertStmt.run(newId, name, email.trim().toLowerCase(), phone || '', subject, stream, 'teacher123');
 
     res.status(201).json({
       success: true,
       teacher: { id: newId, name, email: email.trim().toLowerCase(), phone: phone || '', subject, stream }
     });
   } catch (error: any) {
-    if (error.message?.includes('UNIQUE constraint')) {
+    if (error.code === '23505') {
       res.status(409).json({ error: 'A teacher with this email address already exists.' });
     } else {
       console.error('Error creating teacher:', error);
@@ -123,7 +122,7 @@ router.post('/', authenticateToken, (req: AuthRequest, res: Response): void => {
 });
 
 // PUT /api/teachers/:id - Update teacher details (admin only)
-router.put('/:id', authenticateToken, (req: AuthRequest, res: Response): void => {
+router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   if (req.user?.role !== 'admin') {
     res.status(403).json({ error: 'Access Denied: Only administrators can modify teacher records.' });
     return;
@@ -138,22 +137,20 @@ router.put('/:id', authenticateToken, (req: AuthRequest, res: Response): void =>
   }
 
   try {
-    const existsStmt = db.prepare('SELECT id FROM teachers WHERE id = ?');
-    const exists = existsStmt.get(id);
+    const [exists] = await sql`SELECT id FROM teachers WHERE id = ${id}`;
     if (!exists) {
       res.status(404).json({ error: 'Teacher record not found.' });
       return;
     }
 
-    const updateStmt = db.prepare(`
-      UPDATE teachers SET name = ?, email = ?, phone = ?, subject = ?, stream = ?
-      WHERE id = ?
-    `);
-    updateStmt.run(name, email.trim().toLowerCase(), phone || '', subject, stream, id);
+    await sql`
+      UPDATE teachers SET name = ${name}, email = ${email.trim().toLowerCase()}, phone = ${phone || ''}, subject = ${subject}, stream = ${stream}
+      WHERE id = ${id}
+    `;
 
     res.json({ success: true, teacher: { id, name, email: email.trim().toLowerCase(), phone: phone || '', subject, stream } });
   } catch (error: any) {
-    if (error.message?.includes('UNIQUE constraint')) {
+    if (error.code === '23505') {
       res.status(409).json({ error: 'Another teacher already uses this email address.' });
     } else {
       console.error('Error updating teacher:', error);
@@ -163,7 +160,7 @@ router.put('/:id', authenticateToken, (req: AuthRequest, res: Response): void =>
 });
 
 // DELETE /api/teachers/:id - Remove a teacher (admin only)
-router.delete('/:id', authenticateToken, (req: AuthRequest, res: Response): void => {
+router.delete('/:id', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   if (req.user?.role !== 'admin') {
     res.status(403).json({ error: 'Access Denied: Only administrators can remove teacher accounts.' });
     return;
@@ -172,15 +169,13 @@ router.delete('/:id', authenticateToken, (req: AuthRequest, res: Response): void
   const { id } = req.params;
 
   try {
-    const existsStmt = db.prepare('SELECT id FROM teachers WHERE id = ?');
-    const exists = existsStmt.get(id);
+    const [exists] = await sql`SELECT id FROM teachers WHERE id = ${id}`;
     if (!exists) {
       res.status(404).json({ error: 'Teacher record not found.' });
       return;
     }
 
-    const deleteStmt = db.prepare('DELETE FROM teachers WHERE id = ?');
-    deleteStmt.run(id);
+    await sql`DELETE FROM teachers WHERE id = ${id}`;
 
     res.json({ success: true, message: `Teacher ${id} removed from directory.` });
   } catch (error: any) {
@@ -190,7 +185,7 @@ router.delete('/:id', authenticateToken, (req: AuthRequest, res: Response): void
 });
 
 // PUT /api/teachers/:id/password - Reset teacher password (admin only)
-router.put('/:id/password', authenticateToken, (req: AuthRequest, res: Response): void => {
+router.put('/:id/password', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   if (req.user?.role !== 'admin') {
     res.status(403).json({ error: 'Access Denied: Only administrators can reset teacher passwords.' });
     return;
@@ -205,15 +200,15 @@ router.put('/:id/password', authenticateToken, (req: AuthRequest, res: Response)
   }
 
   try {
-    const existsStmt = db.prepare('SELECT id FROM teachers WHERE id = ?');
-    const exists = existsStmt.get(id);
+    const [exists] = await sql`SELECT id FROM teachers WHERE id = ${id}`;
     if (!exists) {
       res.status(404).json({ error: 'Teacher record not found.' });
       return;
     }
 
-    const updateStmt = db.prepare('UPDATE teachers SET password = ? WHERE id = ?');
-    updateStmt.run(newPassword, id);
+    const hashedPassword = hashPassword(newPassword);
+    await sql`UPDATE teachers SET password = ${hashedPassword} WHERE id = ${id}`;
+
 
     res.json({ success: true, message: `Password for teacher ${id} has been reset.` });
   } catch (error: any) {
@@ -221,5 +216,30 @@ router.put('/:id/password', authenticateToken, (req: AuthRequest, res: Response)
     res.status(500).json({ error: 'Failed to reset teacher password: ' + error.message });
   }
 });
+
+// PUT /api/teachers/:id/approve - Approve teacher account (admin only)
+router.put('/:id/approve', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
+  if (req.user?.role !== 'admin') {
+    res.status(403).json({ error: 'Access Denied: Only administrators can approve teacher accounts.' });
+    return;
+  }
+
+  const { id } = req.params;
+
+  try {
+    const [exists] = await sql`SELECT id FROM teachers WHERE id = ${id}`;
+    if (!exists) {
+      res.status(404).json({ error: 'Teacher record not found.' });
+      return;
+    }
+
+    await sql`UPDATE teachers SET approved = true WHERE id = ${id}`;
+    res.json({ success: true, message: `Teacher ${id} approved successfully.` });
+  } catch (error: any) {
+    console.error('Error approving teacher:', error);
+    res.status(500).json({ error: 'Failed to approve teacher: ' + error.message });
+  }
+});
+
 
 export default router;

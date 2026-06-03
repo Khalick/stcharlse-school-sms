@@ -1,19 +1,18 @@
 import { Router, type Response } from 'express';
-import { db } from '../db.js';
+import { sql } from '../db.js';
 import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
 
 // GET /api/comm-logs - Fetch parent broadcaster communication logs
-router.get('/logs', authenticateToken, (req: AuthRequest, res: Response): void => {
+router.get('/logs', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   if (req.user?.role !== 'admin') {
     res.status(403).json({ error: 'Access Denied: Only administrators can view parental communication logs.' });
     return;
   }
 
   try {
-    const stmt = db.prepare('SELECT * FROM comm_logs ORDER BY rowid DESC');
-    const logs = stmt.all() as any[];
+    const logs = await sql`SELECT * FROM comm_logs ORDER BY created_at DESC`;
 
     // Parse statuses and return matching front-end schemas
     const formatted = logs.map(l => ({
@@ -29,12 +28,13 @@ router.get('/logs', authenticateToken, (req: AuthRequest, res: Response): void =
 
     res.json(formatted);
   } catch (error) {
+    console.error('Error fetching logs:', error);
     res.status(500).json({ error: 'Failed to query communication dispatches.' });
   }
 });
 
 // POST /api/notifications/log - Log a simulated communication dispatch
-router.post('/log', authenticateToken, (req: AuthRequest, res: Response): void => {
+router.post('/log', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   if (req.user?.role !== 'admin' && req.user?.role !== 'teacher') {
     res.status(403).json({ error: 'Access Denied: Students are not authorized to log parental notifications.' });
     return;
@@ -48,26 +48,19 @@ router.post('/log', authenticateToken, (req: AuthRequest, res: Response): void =
   }
 
   try {
-    const insertStmt = db.prepare(`
+    await sql`
       INSERT INTO comm_logs (
         id, timestamp, message, 
         whatsapp_status, whatsapp_trace, 
         sms_status, sms_trace, 
         email_status, email_trace
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    insertStmt.run(
-      id,
-      timestamp,
-      message,
-      channels.whatsapp?.status || 'sent',
-      channels.whatsapp?.trace || '',
-      channels.sms?.status || 'sent',
-      channels.sms?.trace || '',
-      channels.email?.status || 'sent',
-      channels.email?.trace || ''
-    );
+      ) VALUES (
+        ${id}, ${timestamp}, ${message},
+        ${channels.whatsapp?.status || 'sent'}, ${channels.whatsapp?.trace || ''},
+        ${channels.sms?.status || 'sent'}, ${channels.sms?.trace || ''},
+        ${channels.email?.status || 'sent'}, ${channels.email?.trace || ''}
+      )
+    `;
 
     res.status(201).json({ success: true });
   } catch (error: any) {

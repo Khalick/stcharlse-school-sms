@@ -1,5 +1,5 @@
 import { Router, type Response } from 'express';
-import { db } from '../db.js';
+import { sql } from '../db.js';
 import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
@@ -21,7 +21,7 @@ router.post('/chat', authenticateToken, async (req: AuthRequest, res: Response):
     }
 
     // 1. Fetch student info
-    const student = db.prepare('SELECT * FROM students WHERE id = ?').get(studentId) as any;
+    const [student] = await sql`SELECT * FROM students WHERE id = ${studentId}`;
     if (!student) {
       res.status(404).json({ error: 'Student record not found.' });
       return;
@@ -33,7 +33,7 @@ router.post('/chat', authenticateToken, async (req: AuthRequest, res: Response):
     let materialSubject = 'General';
 
     if (materialId) {
-      const material = db.prepare('SELECT * FROM study_materials WHERE id = ?').get(materialId) as any;
+      const [material] = await sql`SELECT * FROM study_materials WHERE id = ${materialId}`;
       if (material) {
         materialTitle = material.title;
         materialSubject = material.subject;
@@ -169,8 +169,8 @@ Return ONLY a valid JSON object. Do not include markdown codeblocks or conversat
     const parsedData = JSON.parse(rawContent.trim());
     const parsedEvents = parsedData.events || [];
 
-    // Match parsed teacher names to existing SQLite teachers
-    const teachers = db.prepare('SELECT id, name, subject, stream FROM teachers').all() as any[];
+    // Match parsed teacher names to existing PostgreSQL teachers
+    const teachers = await sql`SELECT id, name, subject, stream FROM teachers`;
 
     const enrichedEvents = parsedEvents.map((ev: any) => {
       let matchedTeacherId: string | null = null;

@@ -30,6 +30,7 @@ CREATE TABLE teachers (
     subject VARCHAR(100) NOT NULL,
     stream VARCHAR(50) NOT NULL,
     password VARCHAR(255) NOT NULL,
+    approved BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -114,10 +115,10 @@ CREATE INDEX idx_comm_logs_created ON comm_logs (created_at DESC);
 -- -----------------------------------------------------
 
 -- Seed Teachers
-INSERT INTO teachers (id, name, email, phone, subject, stream, password) VALUES
-('T001', 'Agnes Walter', 'agnes.w@stcharles.sc.ke', '+254 712 333444', 'Science', 'Grade 7A', 'teacher123'),
-('T002', 'Beatrice Rotich', 'beatrice.r@stcharles.sc.ke', '+254 722 555666', 'Pre-Technical Studies', 'Grade 8', 'teacher123'),
-('T003', 'Mark Njuguna', 'mark.n@stcharles.sc.ke', '+254 733 777888', 'English Narrative Writing', 'Grade 9', 'teacher123');
+INSERT INTO teachers (id, name, email, phone, subject, stream, password, approved) VALUES
+('T001', 'Agnes Walter', 'agnes.w@stcharles.sc.ke', '+254 712 333444', 'Science', 'Grade 7A', 'teacher123', true),
+('T002', 'Beatrice Rotich', 'beatrice.r@stcharles.sc.ke', '+254 722 555666', 'Pre-Technical Studies', 'Grade 8', 'teacher123', true),
+('T003', 'Mark Njuguna', 'mark.n@stcharles.sc.ke', '+254 733 777888', 'English Narrative Writing', 'Grade 9', 'teacher123', true);
 
 -- Seed Students
 INSERT INTO students (id, name, stream, guardian_name, guardian_phone, guardian_email, password) VALUES

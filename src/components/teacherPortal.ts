@@ -1,6 +1,10 @@
 import { getDb } from '../data/mockDb';
 import { triggerToastNotification } from './simulatorBar';
 import { apiClient } from '../data/apiClient';
+import { renderStudentsTab } from './admin/studentsTab.js';
+
+// Keep track of active tab in teacher portal
+let activeTeacherTab: 'attendance' | 'students' | 'materials' = 'attendance';
 
 // Keep track of unsaved checklist state before submission: studentId -> 'present' | 'absent'
 let currentMorningAttendance: Record<string, 'present' | 'absent'> = {};
@@ -56,91 +60,121 @@ export async function renderTeacherPortal(container: HTMLElement): Promise<void>
         </div>
       </div>
 
-      <div class="dashboard-grid">
-        
-        <!-- Twice-Daily Attendance: Morning Check-In -->
-        <section class="card col-6 relative-card">
-          <h2 class="card-title" style="margin-bottom:12px;">Morning Check-In Register</h2>
-          <p style="font-size:0.85rem; color:var(--text-light); margin-bottom:16px;">
-            Submit safe arrival roll by <strong>8:30 AM</strong>. Late submissions are automatically flagged on the Admin board.
-          </p>
+      <!-- Workspace Tab Selector -->
+      <div class="admin-tabs">
+        <button class="admin-tab-btn ${activeTeacherTab === 'attendance' ? 'active' : ''}" data-tab="attendance">Attendance Registers</button>
+        <button class="admin-tab-btn ${activeTeacherTab === 'students' ? 'active' : ''}" data-tab="students">Students Roster</button>
+        <button class="admin-tab-btn ${activeTeacherTab === 'materials' ? 'active' : ''}" data-tab="materials">Study Resources</button>
+      </div>
 
-          ${isMorningSubmitted ? `
-            <div style="background:var(--green-bg); color:var(--green); padding:16px; border-radius:12px; text-align:center; border:1px solid rgba(16,185,129,0.2);">
-              <span style="font-size:2rem; display:block; margin-bottom:6px;">✓</span>
-              <strong>Morning Register Completed</strong><br>
-              Submitted at ${morningReg.submittedAt} today.
-            </div>
-          ` : `
-            <div class="register-container">
-              ${streamStudents.map(student => `
-                <div class="register-row ${currentMorningAttendance[student.id] === 'absent' ? 'absent' : 'present'}">
-                  <div class="student-info">
-                    <h4>${student.name}</h4>
-                    <p>ID: ${student.id}</p>
-                  </div>
-                  <div class="attendance-toggle-grp">
-                    <button class="attendance-toggle-btn morning-toggle ${currentMorningAttendance[student.id] === 'present' ? 'present-active' : ''}" data-student-id="${student.id}" data-status="present">Present</button>
-                    <button class="attendance-toggle-btn morning-toggle ${currentMorningAttendance[student.id] === 'absent' ? 'absent-active' : ''}" data-student-id="${student.id}" data-status="absent">Absent</button>
-                  </div>
-                </div>
-              `).join('')}
-              
-              <button class="btn-primary" id="btn-submit-morning" style="margin-top:12px; width:100%; justify-content:center;">
-                Submit Morning Check-In Roll
-              </button>
-            </div>
-          `}
-        </section>
+      <div id="teacher-active-tab-panel" style="margin-top: 20px;"></div>
+    `;
 
-        <!-- Twice-Daily Attendance: Evening Check-Out -->
-        <section class="card col-6 relative-card">
-          <h2 class="card-title" style="margin-bottom:12px;">Evening Check-Out Register</h2>
-          <p style="font-size:0.85rem; color:var(--text-light); margin-bottom:16px;">
-            Submit student departure roll by <strong>4:00 PM</strong> before leaving the school grounds.
-          </p>
+    const tabPanel = container.querySelector('#teacher-active-tab-panel') as HTMLElement;
 
-          ${isEveningSubmitted ? `
-            <div style="background:var(--green-bg); color:var(--green); padding:16px; border-radius:12px; text-align:center; border:1px solid rgba(16,185,129,0.2);">
-              <span style="font-size:2rem; display:block; margin-bottom:6px;">✓</span>
-              <strong>Evening Register Completed</strong><br>
-              Submitted at ${eveningReg.submittedAt} today.
-            </div>
-          ` : `
-            <!-- Must submit morning register first -->
-            ${!isMorningSubmitted ? `
-              <div class="lock-screen-overlay" style="border-radius:16px;">
-                <div class="lock-screen-title">Morning Roll Required First</div>
-                <div class="lock-screen-desc">Please complete and submit the Morning Check-In register before unlocking the Evening Check-Out sheet.</div>
+    if (activeTeacherTab === 'attendance') {
+      tabPanel.innerHTML = `
+        <div class="dashboard-grid" style="margin-top: 0;">
+          <!-- Twice-Daily Attendance: Morning Check-In -->
+          <section class="card col-6 relative-card">
+            <h2 class="card-title" style="margin-bottom:12px;">Morning Check-In Register</h2>
+            <p style="font-size:0.85rem; color:var(--text-light); margin-bottom:16px;">
+              Submit safe arrival roll by <strong>8:30 AM</strong>. Late submissions are automatically flagged on the Admin board.
+            </p>
+
+            ${isMorningSubmitted ? `
+              <div style="background:var(--green-bg); color:var(--green); padding:16px; border-radius:12px; text-align:center; border:1px solid rgba(16,185,129,0.2);">
+                <span style="font-size:2rem; display:block; margin-bottom:6px;">✓</span>
+                <strong>Morning Register Completed</strong><br>
+                Submitted at ${morningReg.submittedAt} today.
               </div>
-            ` : ''}
+            ` : `
+              <div class="register-container">
+                ${streamStudents.map(student => `
+                  <div class="register-row ${currentMorningAttendance[student.id] === 'absent' ? 'absent' : 'present'}">
+                    <div class="student-info">
+                      <h4>${student.name}</h4>
+                      <p>ID: ${student.id}</p>
+                    </div>
+                    <div class="attendance-toggle-grp">
+                      <button class="attendance-toggle-btn morning-toggle ${currentMorningAttendance[student.id] === 'present' ? 'present-active' : ''}" data-student-id="${student.id}" data-status="present">Present</button>
+                      <button class="attendance-toggle-btn morning-toggle ${currentMorningAttendance[student.id] === 'absent' ? 'absent-active' : ''}" data-student-id="${student.id}" data-status="absent">Absent</button>
+                    </div>
+                  </div>
+                `).join('')}
+                
+                <button class="btn-primary" id="btn-submit-morning" style="margin-top:12px; width:100%; justify-content:center;">
+                  Submit Morning Check-In Roll
+                </button>
+              </div>
+            `}
+          </section>
 
-            <div class="register-container">
-              ${streamStudents.map(student => `
-                <div class="register-row ${currentEveningAttendance[student.id] === 'absent' ? 'absent' : 'present'}">
-                  <div class="student-info">
-                    <h4>${student.name}</h4>
-                    <p>ID: ${student.id}</p>
-                  </div>
-                  <div class="attendance-toggle-grp">
-                    <button class="attendance-toggle-btn evening-toggle ${currentEveningAttendance[student.id] === 'present' ? 'present-active' : ''}" data-student-id="${student.id}" data-status="present">Present</button>
-                    <button class="attendance-toggle-btn evening-toggle ${currentEveningAttendance[student.id] === 'absent' ? 'absent-active' : ''}" data-student-id="${student.id}" data-status="absent">Absent</button>
-                  </div>
+          <!-- Twice-Daily Attendance: Evening Check-Out -->
+          <section class="card col-6 relative-card">
+            <h2 class="card-title" style="margin-bottom:12px;">Evening Check-Out Register</h2>
+            <p style="font-size:0.85rem; color:var(--text-light); margin-bottom:16px;">
+              Submit student departure roll by <strong>4:00 PM</strong> before leaving the school grounds.
+            </p>
+
+            ${isEveningSubmitted ? `
+              <div style="background:var(--green-bg); color:var(--green); padding:16px; border-radius:12px; text-align:center; border:1px solid rgba(16,185,129,0.2);">
+                <span style="font-size:2rem; display:block; margin-bottom:6px;">✓</span>
+                <strong>Evening Register Completed</strong><br>
+                Submitted at ${eveningReg.submittedAt} today.
+              </div>
+            ` : `
+              <!-- Must submit morning register first -->
+              ${!isMorningSubmitted ? `
+                <div class="lock-screen-overlay" style="border-radius:16px;">
+                  <div class="lock-screen-title">Morning Roll Required First</div>
+                  <div class="lock-screen-desc">Please complete and submit the Morning Check-In register before unlocking the Evening Check-Out sheet.</div>
                 </div>
-              `).join('')}
-              
-              <button class="btn-primary" id="btn-submit-evening" style="margin-top:12px; width:100%; justify-content:center;">
-                Submit Evening Check-Out Roll
-              </button>
-            </div>
-          `}
-        </section>
+              ` : ''}
 
-        <!-- Resource Publisher & Materials library -->
-        <section class="card col-12 relative-card" id="publisher-section">
+              <div class="register-container">
+                ${streamStudents.map(student => `
+                  <div class="register-row ${currentEveningAttendance[student.id] === 'absent' ? 'absent' : 'present'}">
+                    <div class="student-info">
+                      <h4>${student.name}</h4>
+                      <p>ID: ${student.id}</p>
+                    </div>
+                    <div class="attendance-toggle-grp">
+                      <button class="attendance-toggle-btn evening-toggle ${currentEveningAttendance[student.id] === 'present' ? 'present-active' : ''}" data-student-id="${student.id}" data-status="present">Present</button>
+                      <button class="attendance-toggle-btn evening-toggle ${currentEveningAttendance[student.id] === 'absent' ? 'absent-active' : ''}" data-student-id="${student.id}" data-status="absent">Absent</button>
+                    </div>
+                  </div>
+                `).join('')}
+                
+                <button class="btn-primary" id="btn-submit-evening" style="margin-top:12px; width:100%; justify-content:center;">
+                  Submit Evening Check-Out Roll
+                </button>
+              </div>
+            `}
+          </section>
+        </div>
+      `;
+      bindTeacherEvents(container, teacher, streamStudents);
+    } else if (activeTeacherTab === 'students') {
+      tabPanel.innerHTML = `
+        <div style="position:relative; width:100%;">
+          ${isEveningLockActive ? `
+            <div class="lock-screen-overlay" style="z-index: 10; border-radius: 16px;">
+              <div class="lock-screen-title">Workspace Locked: Evening Register Required!</div>
+              <div class="lock-screen-desc">It is past 3:30 PM. To comply with St. Charles safety policies, other panels are locked until the <strong>Evening Check-Out</strong> register is submitted.</div>
+            </div>
+          ` : ''}
+          <div id="teacher-students-inner"></div>
+        </div>
+      `;
+      const innerContainer = tabPanel.querySelector('#teacher-students-inner') as HTMLElement;
+      await renderStudentsTab(innerContainer);
+    } else if (activeTeacherTab === 'materials') {
+      tabPanel.innerHTML = `
+        <section class="card col-12 relative-card" id="publisher-section" style="position:relative;">
           <!-- Interactive Evening Lock Overlay -->
           ${isEveningLockActive ? `
-            <div class="lock-screen-overlay">
+            <div class="lock-screen-overlay" style="border-radius:16px;">
               <div class="lock-screen-title">Workspace Locked: Evening Register Required!</div>
               <div class="lock-screen-desc">It is past 3:30 PM. To comply with St. Charles safety policies, other panels are locked until the <strong>Evening Check-Out</strong> register is submitted.</div>
             </div>
@@ -189,12 +223,21 @@ export async function renderTeacherPortal(container: HTMLElement): Promise<void>
             </div>
           </div>
         </section>
+      `;
+      bindTeacherEvents(container, teacher, streamStudents);
+    }
 
-      </div>
-    `;
+    // Bind tab selectors
+    container.querySelectorAll('.admin-tab-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const tab = (e.currentTarget as HTMLElement).dataset.tab as 'attendance' | 'students' | 'materials';
+        if (tab) {
+          activeTeacherTab = tab;
+          renderTeacherPortal(container);
+        }
+      });
+    });
 
-    // Bind Event Handlers asynchronously with database states
-    bindTeacherEvents(container, teacher, streamStudents);
   } catch (err: any) {
     console.error('Error rendering teacher portal:', err);
     container.innerHTML = `

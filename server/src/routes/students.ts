@@ -1,15 +1,17 @@
 import { Router, type Response } from 'express';
-import { db } from '../db.js';
+import { sql } from '../db.js';
 import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
+import { hashPassword } from '../lib/crypto.js';
+
 
 const router = Router();
 
 // GET /api/students - Query student directories (with dynamic search parameters and attendance rates)
-router.get('/', authenticateToken, (req: AuthRequest, res: Response) => {
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   const { q } = req.query;
 
   try {
-    let queryStr = `
+    let query = sql`
       SELECT 
         s.id,
         s.name,
@@ -17,27 +19,23 @@ router.get('/', authenticateToken, (req: AuthRequest, res: Response) => {
         s.guardian_name,
         s.guardian_phone,
         s.guardian_email,
-        COUNT(reg.id) as total_sessions,
-        SUM(CASE WHEN r.status = 'present' THEN 1 ELSE 0 END) as present_sessions
+        COUNT(reg.id)::int as total_sessions,
+        SUM(CASE WHEN r.status = 'present' THEN 1 ELSE 0 END)::int as present_sessions
       FROM students s
       LEFT JOIN attendance_records r ON s.id = r.student_id
       LEFT JOIN attendance_registers reg ON r.register_id = reg.id AND reg.session = 'morning'
     `;
 
-    let params: any[] = [];
     if (req.user?.role === 'student') {
-      queryStr += ` WHERE s.id = ?`;
-      params.push(req.user.id);
+      query = sql`${query} WHERE s.id = ${req.user.id}`;
     } else if (q) {
-      queryStr += ` WHERE LOWER(s.name) LIKE ? OR LOWER(s.stream) LIKE ? OR LOWER(s.id) LIKE ?`;
       const filter = `%${String(q).trim().toLowerCase()}%`;
-      params.push(filter, filter, filter);
+      query = sql`${query} WHERE LOWER(s.name) LIKE ${filter} OR LOWER(s.stream) LIKE ${filter} OR LOWER(s.id) LIKE ${filter}`;
     }
 
-    queryStr += ` GROUP BY s.id`;
+    query = sql`${query} GROUP BY s.id, s.name, s.stream, s.guardian_name, s.guardian_phone, s.guardian_email`;
 
-    const stmt = db.prepare(queryStr);
-    const students = stmt.all(...params) as any[];
+    const students = await query;
 
     // Map dynamic rates and inject baseline parameters
     const formatted = students.map(s => {
@@ -61,7 +59,7 @@ router.get('/', authenticateToken, (req: AuthRequest, res: Response) => {
 });
 
 // GET /api/students/:id/attendance-today - Fetch morning/evening register outcomes for active student
-router.get('/:id/attendance-today', authenticateToken, (req: AuthRequest, res: Response): void => {
+router.get('/:id/attendance-today', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
 
   if (req.user?.role === 'student' && req.user.id !== id) {
@@ -72,14 +70,12 @@ router.get('/:id/attendance-today', authenticateToken, (req: AuthRequest, res: R
   const todayStr = new Date().toISOString().split('T')[0];
 
   try {
-    const stmt = db.prepare(`
+    const records = await sql`
       SELECT reg.session, r.status
       FROM attendance_records r
       JOIN attendance_registers reg ON r.register_id = reg.id
-      WHERE r.student_id = ? AND reg.date = ?
-    `);
-
-    const records = stmt.all(id, todayStr) as { session: string; status: string }[];
+      WHERE r.student_id = ${id} AND reg.date = ${todayStr}
+    `;
 
     const morningRec = records.find(r => r.session === 'morning');
     const eveningRec = records.find(r => r.session === 'evening');
@@ -94,9 +90,9 @@ router.get('/:id/attendance-today', authenticateToken, (req: AuthRequest, res: R
 });
 
 // POST /api/students - Register New Student Admission
-router.post('/', authenticateToken, (req: AuthRequest, res: Response): void => {
-  if (req.user?.role !== 'admin') {
-    res.status(403).json({ error: 'Access Denied: Only administrators are authorized to register student admissions.' });
+router.post('/', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
+  if (req.user?.role !== 'admin' && req.user?.role !== 'teacher') {
+    res.status(403).json({ error: 'Access Denied: Only administrators or teachers are authorized to register student admissions.' });
     return;
   }
 
@@ -109,17 +105,17 @@ router.post('/', authenticateToken, (req: AuthRequest, res: Response): void => {
 
   try {
     // Generate next student ID reference Sxxx
-    const countStmt = db.prepare('SELECT COUNT(*) as count FROM students');
-    const { count } = countStmt.get() as { count: number };
+    const [countResult] = await sql`SELECT COUNT(*)::int as count FROM students`;
+    const count = countResult ? countResult.count : 0;
     const nextIdNum = count + 1;
     const newId = `S${nextIdNum < 100 ? (nextIdNum < 10 ? '00' + nextIdNum : '0' + nextIdNum) : nextIdNum}`;
 
-    const insertStmt = db.prepare(`
+    const hashedPassword = hashPassword(newId);
+    await sql`
       INSERT INTO students (id, name, stream, guardian_name, guardian_phone, guardian_email, password)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
+      VALUES (${newId}, ${name}, ${stream}, ${guardianName}, ${guardianPhone}, ${guardianEmail}, ${hashedPassword})
+    `;
 
-    insertStmt.run(newId, name, stream, guardianName, guardianPhone, guardianEmail, 'student123');
 
     res.status(201).json({
       success: true,
@@ -139,12 +135,13 @@ router.post('/', authenticateToken, (req: AuthRequest, res: Response): void => {
   }
 });
 
-// PUT /api/students/:id - Update student details (admin only)
-router.put('/:id', authenticateToken, (req: AuthRequest, res: Response): void => {
-  if (req.user?.role !== 'admin') {
-    res.status(403).json({ error: 'Access Denied: Only administrators can modify student records.' });
+// PUT /api/students/:id - Update student details (admin/teacher)
+router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
+  if (req.user?.role !== 'admin' && req.user?.role !== 'teacher') {
+    res.status(403).json({ error: 'Access Denied: Only administrators or teachers can modify student records.' });
     return;
   }
+
 
   const { id } = req.params;
   const { name, stream, guardianName, guardianPhone, guardianEmail } = req.body;
@@ -155,18 +152,16 @@ router.put('/:id', authenticateToken, (req: AuthRequest, res: Response): void =>
   }
 
   try {
-    const existsStmt = db.prepare('SELECT id FROM students WHERE id = ?');
-    const exists = existsStmt.get(id);
+    const [exists] = await sql`SELECT id FROM students WHERE id = ${id}`;
     if (!exists) {
       res.status(404).json({ error: 'Student record not found.' });
       return;
     }
 
-    const updateStmt = db.prepare(`
-      UPDATE students SET name = ?, stream = ?, guardian_name = ?, guardian_phone = ?, guardian_email = ?
-      WHERE id = ?
-    `);
-    updateStmt.run(name, stream, guardianName, guardianPhone, guardianEmail, id);
+    await sql`
+      UPDATE students SET name = ${name}, stream = ${stream}, guardian_name = ${guardianName}, guardian_phone = ${guardianPhone}, guardian_email = ${guardianEmail}
+      WHERE id = ${id}
+    `;
 
     res.json({ success: true, student: { id, name, stream, guardianName, guardianPhone, guardianEmail } });
   } catch (error: any) {
@@ -175,29 +170,26 @@ router.put('/:id', authenticateToken, (req: AuthRequest, res: Response): void =>
   }
 });
 
-// DELETE /api/students/:id - Remove a student (admin only)
-router.delete('/:id', authenticateToken, (req: AuthRequest, res: Response): void => {
-  if (req.user?.role !== 'admin') {
-    res.status(403).json({ error: 'Access Denied: Only administrators can remove student records.' });
+// DELETE /api/students/:id - Remove a student (admin/teacher)
+router.delete('/:id', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
+  if (req.user?.role !== 'admin' && req.user?.role !== 'teacher') {
+    res.status(403).json({ error: 'Access Denied: Only administrators or teachers can remove student records.' });
     return;
   }
+
 
   const { id } = req.params;
 
   try {
-    const existsStmt = db.prepare('SELECT id FROM students WHERE id = ?');
-    const exists = existsStmt.get(id);
+    const [exists] = await sql`SELECT id FROM students WHERE id = ${id}`;
     if (!exists) {
       res.status(404).json({ error: 'Student record not found.' });
       return;
     }
 
     // Remove attendance records first, then student
-    const deleteRecords = db.prepare('DELETE FROM attendance_records WHERE student_id = ?');
-    deleteRecords.run(id);
-
-    const deleteStmt = db.prepare('DELETE FROM students WHERE id = ?');
-    deleteStmt.run(id);
+    await sql`DELETE FROM attendance_records WHERE student_id = ${id}`;
+    await sql`DELETE FROM students WHERE id = ${id}`;
 
     res.json({ success: true, message: `Student ${id} removed from directory.` });
   } catch (error: any) {
@@ -206,10 +198,10 @@ router.delete('/:id', authenticateToken, (req: AuthRequest, res: Response): void
   }
 });
 
-// PUT /api/students/:id/password - Reset student password (admin only)
-router.put('/:id/password', authenticateToken, (req: AuthRequest, res: Response): void => {
-  if (req.user?.role !== 'admin') {
-    res.status(403).json({ error: 'Access Denied: Only administrators can reset student passwords.' });
+// PUT /api/students/:id/password - Reset student password (admin/teacher)
+router.put('/:id/password', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
+  if (req.user?.role !== 'admin' && req.user?.role !== 'teacher') {
+    res.status(403).json({ error: 'Access Denied: Only administrators or teachers can reset student passwords.' });
     return;
   }
 
@@ -222,15 +214,15 @@ router.put('/:id/password', authenticateToken, (req: AuthRequest, res: Response)
   }
 
   try {
-    const existsStmt = db.prepare('SELECT id FROM students WHERE id = ?');
-    const exists = existsStmt.get(id);
+    const [exists] = await sql`SELECT id FROM students WHERE id = ${id}`;
     if (!exists) {
       res.status(404).json({ error: 'Student record not found.' });
       return;
     }
 
-    const updateStmt = db.prepare('UPDATE students SET password = ? WHERE id = ?');
-    updateStmt.run(newPassword, id);
+    const hashedPassword = hashPassword(newPassword);
+    await sql`UPDATE students SET password = ${hashedPassword} WHERE id = ${id}`;
+
 
     res.json({ success: true, message: `Password for student ${id} has been reset.` });
   } catch (error: any) {

@@ -5,6 +5,7 @@ import { playWarningChime, triggerHapticVibration } from '../lib/audioService';
 import { apiClient, setAuthToken } from '../data/apiClient';
 
 let activeLoginTab: 'student' | 'teacher' | 'admin' = 'student';
+let isTeacherRegistering = false;
 
 export function renderLoginPortal(container: HTMLElement): void {
   container.innerHTML = `
@@ -63,36 +64,7 @@ export function renderLoginPortal(container: HTMLElement): void {
       <!-- Right side: Authenticated Login Card -->
       <div class="login-card-section">
         <div class="login-card" id="login-form-card">
-          <div class="login-card-header">
-            <h3>Sign In to Digital Campus</h3>
-            <p>Access your personalized dashboard, schedules, and registers.</p>
-          </div>
-
-          <!-- Tab Selectors -->
-          <div class="login-tabs">
-            <button class="login-tab-btn ${activeLoginTab === 'student' ? 'active' : ''}" data-tab="student">Student</button>
-            <button class="login-tab-btn ${activeLoginTab === 'teacher' ? 'active' : ''}" data-tab="teacher">Teacher</button>
-            <button class="login-tab-btn ${activeLoginTab === 'admin' ? 'active' : ''}" data-tab="admin">Admin</button>
-          </div>
-
-          <!-- Login Form Form -->
-          <form id="campus-login-form" style="display:flex; flex-direction:column; gap:16px; margin-top:20px;">
-            ${renderLoginFormFields()}
-            
-            <button type="submit" class="btn-primary" style="justify-content:center; padding:12px; font-weight:600; font-size:0.95rem; border-radius:8px;">
-              Verify Credentials & Sign In
-            </button>
-          </form>
-
-          <!-- Help guidelines for tester -->
-          <div class="login-demo-helper">
-            <strong>Quick-Access Demo Credentials:</strong>
-            <ul>
-              ${activeLoginTab === 'student' ? '<li>Student ID: <code>S001</code> | Password: <code>student123</code></li>' : ''}
-              ${activeLoginTab === 'teacher' ? '<li>Teacher Email: <code>agnes.w@stcharles.sc.ke</code> | Password: <code>teacher123</code></li>' : ''}
-              ${activeLoginTab === 'admin' ? '<li>Admin Username: <code>admin</code> | Password: <code>admin123</code></li>' : ''}
-            </ul>
-          </div>
+          ${isTeacherRegistering ? renderTeacherRegistrationForm() : renderLoginForm()}
         </div>
       </div>
 
@@ -103,16 +75,105 @@ export function renderLoginPortal(container: HTMLElement): void {
   bindLoginEvents(container);
 }
 
+function renderLoginForm(): string {
+  return `
+    <div class="login-card-header">
+      <h3>Sign In to Digital Campus</h3>
+      <p>Access your personalized dashboard, schedules, and registers.</p>
+    </div>
+
+    <!-- Tab Selectors -->
+    <div class="login-tabs">
+      <button class="login-tab-btn ${activeLoginTab === 'student' ? 'active' : ''}" data-tab="student">Student</button>
+      <button class="login-tab-btn ${activeLoginTab === 'teacher' ? 'active' : ''}" data-tab="teacher">Teacher</button>
+      <button class="login-tab-btn ${activeLoginTab === 'admin' ? 'active' : ''}" data-tab="admin">Admin</button>
+    </div>
+
+    <!-- Login Form Form -->
+    <form id="campus-login-form" style="display:flex; flex-direction:column; gap:16px; margin-top:20px;">
+      ${renderLoginFormFields()}
+      
+      <button type="submit" class="btn-primary" style="justify-content:center; padding:12px; font-weight:600; font-size:0.95rem; border-radius:8px;">
+        Verify Credentials & Sign In
+      </button>
+    </form>
+
+    ${activeLoginTab === 'teacher' ? `
+      <div style="text-align:center; margin-top:12px;">
+        <a href="#" id="link-register-teacher" style="color:var(--primary); font-size:0.85rem; font-weight:600; text-decoration:none;">Register Staff Account</a>
+      </div>
+    ` : ''}
+
+    <!-- Help guidelines for tester -->
+    <div class="login-demo-helper">
+      <strong>Quick-Access Demo Credentials:</strong>
+      <ul>
+        ${activeLoginTab === 'student' ? '<li>Student Username (Name or ID): <code>David</code> or <code>S001</code> | Password: <code>S001</code></li>' : ''}
+        ${activeLoginTab === 'teacher' ? '<li>Teacher Email: <code>agnes.w@stcharles.sc.ke</code> | Password: <code>teacher123</code></li>' : ''}
+        ${activeLoginTab === 'admin' ? '<li>Admin Username: <code>charlie@61</code> | Password: <code>admin@61</code></li>' : ''}
+      </ul>
+    </div>
+  `;
+}
+
+function renderTeacherRegistrationForm(): string {
+  return `
+    <div class="login-card-header">
+      <h3>Register Teacher Account</h3>
+      <p>Submit your details to register as a staff member. Access is granted upon administrator approval.</p>
+    </div>
+    
+    <form id="teacher-register-form" style="display:flex; flex-direction:column; gap:16px; margin-top:20px;">
+      <div class="form-group">
+        <label for="reg-name">Full Name</label>
+        <input type="text" id="reg-name" class="form-control" placeholder="e.g. Agnes Wambui" required>
+      </div>
+      <div class="form-group">
+        <label for="reg-email">Email Address</label>
+        <input type="email" id="reg-email" class="form-control" placeholder="e.g. agnes.w@stcharles.sc.ke" required>
+      </div>
+      <div class="form-group">
+        <label for="reg-phone">Mobile Phone</label>
+        <input type="text" id="reg-phone" class="form-control" placeholder="e.g. +254 721 111222">
+      </div>
+      <div class="form-group">
+        <label for="reg-subject">Subject Specialization</label>
+        <input type="text" id="reg-subject" class="form-control" placeholder="e.g. Science" required>
+      </div>
+      <div class="form-group">
+        <label for="reg-stream">Class Stream Assignment</label>
+        <select id="reg-stream" class="form-control" required style="font-family: inherit;">
+          <option value="Grade 7A">Grade 7A</option>
+          <option value="Grade 8">Grade 8</option>
+          <option value="Grade 9">Grade 9</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="reg-password">Choose Password</label>
+        <input type="password" id="reg-password" class="form-control" placeholder="••••••••" required>
+      </div>
+      
+      <button type="submit" class="btn-primary" style="justify-content:center; padding:12px; font-weight:600; font-size:0.95rem; border-radius:8px;">
+        Submit Registration Request
+      </button>
+
+      <div style="text-align:center; margin-top:10px;">
+        <a href="#" id="link-back-to-login" style="color:var(--primary); font-size:0.85rem; font-weight:600; text-decoration:none;">← Back to Sign In</a>
+      </div>
+    </form>
+  `;
+}
+
 function renderLoginFormFields(): string {
   if (activeLoginTab === 'student') {
     return `
       <div class="form-group">
-        <label for="login-student-id">Student ID Reference</label>
-        <input type="text" id="login-student-id" class="form-control" placeholder="e.g. S001" required autocomplete="username">
+        <label for="login-student-id">Student First Name or ID</label>
+        <input type="text" id="login-student-id" class="form-control" placeholder="e.g. David or S001" required autocomplete="username">
       </div>
       <div class="form-group">
-        <label for="login-password">Security Password</label>
-        <input type="password" id="login-password" class="form-control" placeholder="••••••••" required autocomplete="current-password">
+        <label for="login-password">Password (Admission Number)</label>
+        <input type="password" id="login-password" class="form-control" placeholder="e.g. S001" required autocomplete="current-password">
       </div>
     `;
   } else if (activeLoginTab === 'teacher') {
@@ -130,7 +191,7 @@ function renderLoginFormFields(): string {
     return `
       <div class="form-group">
         <label for="login-admin-user">Administrator Username</label>
-        <input type="text" id="login-admin-user" class="form-control" placeholder="e.g. admin" required autocomplete="username">
+        <input type="text" id="login-admin-user" class="form-control" placeholder="e.g. charlie@61" required autocomplete="username">
       </div>
       <div class="form-group">
         <label for="login-password">Security Password</label>
@@ -141,6 +202,43 @@ function renderLoginFormFields(): string {
 }
 
 function bindLoginEvents(container: HTMLElement): void {
+  if (isTeacherRegistering) {
+    // Back to Login Link
+    container.querySelector('#link-back-to-login')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      isTeacherRegistering = false;
+      renderLoginPortal(container);
+    });
+
+    // Registration Form Submit
+    container.querySelector('#teacher-register-form')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const payload = {
+        name: (container.querySelector('#reg-name') as HTMLInputElement).value.trim(),
+        email: (container.querySelector('#reg-email') as HTMLInputElement).value.trim(),
+        phone: (container.querySelector('#reg-phone') as HTMLInputElement).value.trim(),
+        subject: (container.querySelector('#reg-subject') as HTMLInputElement).value.trim(),
+        stream: (container.querySelector('#reg-stream') as HTMLSelectElement).value,
+        password: (container.querySelector('#reg-password') as HTMLInputElement).value
+      };
+
+      try {
+        await apiClient.post('/auth/register-teacher', payload);
+        triggerToastNotification(
+          'Registration Submitted',
+          'Your teacher profile has been registered. Please wait for administrator approval.'
+        );
+        isTeacherRegistering = false;
+        renderLoginPortal(container);
+      } catch (err: any) {
+        triggerToastNotification('Registration Failed', err.message, 'danger');
+      }
+    });
+
+    return;
+  }
+
   // Tab Switch Action
   const tabs = container.querySelectorAll('.login-tab-btn');
   tabs.forEach(btn => {
@@ -151,6 +249,13 @@ function bindLoginEvents(container: HTMLElement): void {
         renderLoginPortal(container);
       }
     });
+  });
+
+  // Link to Register Teacher
+  container.querySelector('#link-register-teacher')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    isTeacherRegistering = true;
+    renderLoginPortal(container);
   });
 
   // Form Submit Submission
@@ -165,17 +270,17 @@ function bindLoginEvents(container: HTMLElement): void {
 
     if (activeLoginTab === 'student') {
       const idEl = container.querySelector('#login-student-id') as HTMLInputElement;
-      payload.studentId = idEl?.value.trim().toUpperCase();
+      payload.studentId = idEl?.value.trim();
     } else if (activeLoginTab === 'teacher') {
       const emailEl = container.querySelector('#login-teacher-email') as HTMLInputElement;
       payload.email = emailEl?.value.trim().toLowerCase();
     } else {
       const adminEl = container.querySelector('#login-admin-user') as HTMLInputElement;
-      payload.username = adminEl?.value.trim().toLowerCase();
+      payload.username = adminEl?.value.trim();
     }
 
     try {
-      // POST request to actual express login endpoint
+      // POST request to express login endpoint
       const response = await apiClient.post<{ token: string, user: SessionUser }>('/auth/login', payload);
       
       // Store JWT token dynamically in apiClient/localStorage

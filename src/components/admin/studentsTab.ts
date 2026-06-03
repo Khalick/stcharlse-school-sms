@@ -1,12 +1,35 @@
 import { triggerToastNotification } from '../simulatorBar';
 import { apiClient } from '../../data/apiClient';
+import { getDb } from '../../data/mockDb';
+
 
 let searchQuery = '';
 
 export async function renderStudentsTab(container: HTMLElement): Promise<void> {
-  const students = await apiClient.get<any[]>(`/students?q=${encodeURIComponent(searchQuery)}`);
+  const db = getDb();
+  const isTeacher = db.currentUser?.role === 'teacher';
+  
+  let students: any[] = [];
+  try {
+    if (isTeacher) {
+      students = await apiClient.get<any[]>(`/teachers/${db.currentUser?.id || ''}/students`);
+      if (searchQuery) {
+        const query = searchQuery.trim().toLowerCase();
+        students = students.filter(s => 
+          s.id.toLowerCase().includes(query) ||
+          s.name.toLowerCase().includes(query) ||
+          s.stream.toLowerCase().includes(query)
+        );
+      }
+    } else {
+      students = await apiClient.get<any[]>(`/students?q=${encodeURIComponent(searchQuery)}`);
+    }
+  } catch (err: any) {
+    triggerToastNotification('Error', 'Failed to retrieve students: ' + err.message, 'danger');
+  }
+
   container.innerHTML = `
-    <div class="card-header-with-action"><h2 class="card-title">Student Directory</h2>
+    <div class="card-header-with-action"><h2 class="card-title">${isTeacher ? 'Class Students Roster' : 'Student Directory'}</h2>
       <button class="btn-accent" id="btn-open-admission">Register New Student</button></div>
     <div class="search-bar-container">
       <input type="text" id="stu-search" class="form-control" placeholder="Search by name, stream, or ID..." value="${searchQuery}">
@@ -29,6 +52,7 @@ export async function renderStudentsTab(container: HTMLElement): Promise<void> {
     </tbody></table></div>
     <div id="stu-modal-container"></div>
   `;
+
 
   // Search
   const doSearch = () => { searchQuery = (container.querySelector('#stu-search') as HTMLInputElement)?.value || ''; renderStudentsTab(container); };
@@ -55,12 +79,16 @@ export async function renderStudentsTab(container: HTMLElement): Promise<void> {
 function showStudentModal(container: HTMLElement, student: any | null): void {
   const mc = container.querySelector('#stu-modal-container')!;
   const isEdit = !!student;
+  const db = getDb();
+  const isTeacher = db.currentUser?.role === 'teacher';
+
+  
   mc.innerHTML = `<div class="modal-overlay"><div class="modal-content">
     <div class="modal-header"><h3>${isEdit ? 'Edit Student' : 'Register New Student'}</h3><button class="modal-close-btn" id="close-stu-modal">×</button></div>
     <form id="stu-form"><div class="modal-body">
       <div class="form-group"><label>Student Name</label><input type="text" id="sf-name" class="form-control" value="${student?.name || ''}" required></div>
-      <div class="form-group"><label>Class Stream</label><select id="sf-stream" class="form-control" required>
-        ${['Grade 7A', 'Grade 8', 'Grade 9'].map(g => `<option value="${g}" ${student?.stream === g ? 'selected' : ''}>${g}</option>`).join('')}
+      <div class="form-group"><label>Class Stream</label><select id="sf-stream" class="form-control" required ${isTeacher ? 'disabled' : ''}>
+        ${['Grade 7A', 'Grade 8', 'Grade 9'].map(g => `<option value="${g}" ${student?.stream === g ? 'selected' : (isTeacher && db.currentUser?.stream === g ? 'selected' : '')}>${g}</option>`).join('')}
       </select></div>
       <div class="form-group"><label>Guardian Name</label><input type="text" id="sf-gname" class="form-control" value="${student?.guardianName || ''}" required></div>
       <div class="form-group"><label>Guardian Phone</label><input type="tel" id="sf-gphone" class="form-control" value="${student?.guardianPhone || '+254 '}" required></div>
@@ -77,29 +105,18 @@ function showStudentModal(container: HTMLElement, student: any | null): void {
     e.preventDefault();
     const body = {
       name: (mc.querySelector('#sf-name') as HTMLInputElement).value.trim(),
-      stream: (mc.querySelector('#sf-stream') as HTMLSelectElement).value,
+      stream: isTeacher ? (db.currentUser?.stream || 'Grade 7A') : (mc.querySelector('#sf-stream') as HTMLSelectElement).value,
       guardianName: (mc.querySelector('#sf-gname') as HTMLInputElement).value.trim(),
       guardianPhone: (mc.querySelector('#sf-gphone') as HTMLInputElement).value.trim(),
       guardianEmail: (mc.querySelector('#sf-gemail') as HTMLInputElement).value.trim(),
     };
     try {
-      const token = localStorage.getItem('stcharles_jwt_token');
       if (isEdit) {
-        const response = await fetch(`http://localhost:3001/api/students/${student.id}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify(body)
-        });
-        if (!response.ok) {
-          const errData = await response.json();
-          throw new Error(errData.error || 'Failed to update student');
-        }
+        await apiClient.put(`/students/${student.id}`, body);
       } else {
         await apiClient.post('/students', body);
       }
+
       triggerToastNotification(isEdit ? 'Student Updated' : 'Student Admitted', `${body.name} saved.`);
       close(); renderStudentsTab(container);
     } catch (err: any) { triggerToastNotification('Error', err.message, 'danger'); }
@@ -126,23 +143,12 @@ function showPasswordModal(container: HTMLElement, id: string, type: 'student' |
     const pwd = (mc.querySelector('#pf-pwd') as HTMLInputElement).value;
     const endpoint = type === 'student' ? `/students/${id}/password` : `/teachers/${id}/password`;
     try {
-      const token = localStorage.getItem('stcharles_jwt_token');
-      const response = await fetch(`http://localhost:3001/api${endpoint}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ newPassword: pwd })
-      });
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || 'Failed to reset password');
-      }
+      await apiClient.put(endpoint, { newPassword: pwd });
       triggerToastNotification('Password Reset', `Password for ${id} updated.`);
       close();
     } catch (err: any) { triggerToastNotification('Error', err.message, 'danger'); }
   });
+
 }
 
 function showConfirm(container: HTMLElement, title: string, msg: string, onConfirm: () => void): void {

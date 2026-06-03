@@ -1,11 +1,11 @@
 import { Router, type Response } from 'express';
-import { db } from '../db.js';
+import { sql } from '../db.js';
 import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
 
 // GET /api/attendance/today?teacherId=T001
-router.get('/today', authenticateToken, (req: AuthRequest, res: Response): void => {
+router.get('/today', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   const { teacherId } = req.query;
 
   if (!teacherId) {
@@ -22,18 +22,17 @@ router.get('/today', authenticateToken, (req: AuthRequest, res: Response): void 
     const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
     
     // Find morning & evening registers for today
-    const stmt = db.prepare(`
+    const registers = await sql`
       SELECT * FROM attendance_registers 
-      WHERE teacher_id = ? AND date = ?
-    `);
-    const registers = stmt.all(teacherId, todayStr) as any[];
+      WHERE teacher_id = ${String(teacherId)} AND date = ${todayStr}
+    `;
 
     const morningReg = registers.find(r => r.session === 'morning');
     const eveningReg = registers.find(r => r.session === 'evening');
 
     res.json({
-      morning: morningReg ? { submittedAt: morningReg.submittedAt } : null,
-      evening: eveningReg ? { submittedAt: eveningReg.submittedAt } : null
+      morning: morningReg ? { submittedAt: morningReg.submitted_at } : null,
+      evening: eveningReg ? { submittedAt: eveningReg.submitted_at } : null
     });
   } catch (error) {
     console.error('Error fetching today register state:', error);
@@ -42,7 +41,7 @@ router.get('/today', authenticateToken, (req: AuthRequest, res: Response): void 
 });
 
 // POST /api/attendance/register (Submit morning or evening register)
-router.post('/register', authenticateToken, (req: AuthRequest, res: Response): void => {
+router.post('/register', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   const { session, teacherId, date, submittedAt, records } = req.body;
 
   if (!session || !teacherId || !date || !submittedAt || !Array.isArray(records)) {
@@ -55,68 +54,31 @@ router.post('/register', authenticateToken, (req: AuthRequest, res: Response): v
     return;
   }
 
-  // Transaction block to guarantee database consistency
-  const runTransaction = db.transaction(() => {
-    // 1. Insert or update the register metadata
-    const upsertRegister = db.prepare(`
-      INSERT INTO attendance_registers (date, session, teacher_id, submitted_at)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(date, session, teacher_id) DO UPDATE SET submitted_at = excluded.submitted_at
-      RETURNING id
-    `);
-    const result = upsertRegister.get(date, session, teacherId, submittedAt) as any;
-    const registerId = result.id;
-
-    // 2. Clear old individual records for this register if updating
-    const deleteRecords = db.prepare('DELETE FROM attendance_records WHERE register_id = ?');
-    deleteRecords.run(registerId);
-
-    // 3. Bulk insert individual attendance statuses
-    const insertRecord = db.prepare(`
-      INSERT INTO attendance_records (register_id, student_id, status)
-      VALUES (?, ?, ?)
-    `);
-
-    for (const rec of records) {
-      insertRecord.run(registerId, rec.studentId, rec.status);
-    }
-
-    return registerId;
-  });
-
   try {
-    const registerId = runTransaction();
+    // Run the query sequence inside a transaction block to guarantee database consistency
+    const registerId = await sql.begin(async (tx) => {
+      // 1. Insert or update the register metadata
+      const [result] = await tx`
+        INSERT INTO attendance_registers (date, session, teacher_id, submitted_at)
+        VALUES (${date}, ${session}, ${teacherId}, ${submittedAt})
+        ON CONFLICT(date, session, teacher_id) DO UPDATE SET submitted_at = EXCLUDED.submitted_at
+        RETURNING id
+      `;
+      const rId = result.id;
 
-    // 4. Auto-recalculate historical attendance rate for affected students (morning session only)
-    if (session === 'morning') {
-      const affectedStudents = records.map(r => r.studentId);
-      const updateRateStmt = db.prepare(`
-        SELECT 
-          COUNT(*) as total_sessions,
-          SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as present_sessions
-        FROM attendance_records r
-        JOIN attendance_registers reg ON r.register_id = reg.id
-        WHERE r.student_id = ? AND reg.session = 'morning'
-      `);
+      // 2. Clear old individual records for this register if updating
+      await tx`DELETE FROM attendance_records WHERE register_id = ${rId}`;
 
-      for (const studentId of affectedStudents) {
-        const stats = updateRateStmt.get(studentId) as { total_sessions: number; present_sessions: number };
-        
-        if (stats && stats.total_sessions > 0) {
-          // Add a baseline of 20 historical sessions (matching original mock DB calculations)
-          // to simulate deep historical attendance without requiring massive seeding
-          const baselinePresent = 19;
-          const baselineTotal = 20;
-          const totalDays = stats.total_sessions + baselineTotal;
-          const presentDays = stats.present_sessions + baselinePresent;
-          
-          const rate = Math.round((presentDays / totalDays) * 100);
-          
-          // No attendance rate column in students database directly because it's dynamic,
-          // but we can query it dynamically! No updates required since we compute on demand.
-        }
+      // 3. Bulk insert individual attendance statuses
+      for (const rec of records) {
+        await tx`
+          INSERT INTO attendance_records (register_id, student_id, status)
+          VALUES (${rId}, ${rec.studentId}, ${rec.status})
+        `;
       }
-    }
+
+      return rId;
+    });
 
     res.json({ success: true, registerId });
   } catch (error: any) {
@@ -126,14 +88,14 @@ router.post('/register', authenticateToken, (req: AuthRequest, res: Response): v
 });
 
 // GET /api/attendance/rates - Fetch current attendance rate per student dynamically
-router.get('/rates', authenticateToken, (req: AuthRequest, res: Response): void => {
+router.get('/rates', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   if (req.user?.role === 'student') {
     res.status(403).json({ error: 'Access Denied: Students are not authorized to view overall attendance rates.' });
     return;
   }
 
   try {
-    const stmt = db.prepare(`
+    const students = await sql`
       SELECT 
         s.id,
         s.name,
@@ -141,15 +103,13 @@ router.get('/rates', authenticateToken, (req: AuthRequest, res: Response): void 
         s.guardian_name,
         s.guardian_phone,
         s.guardian_email,
-        COUNT(reg.id) as total_sessions,
-        SUM(CASE WHEN r.status = 'present' THEN 1 ELSE 0 END) as present_sessions
+        COUNT(reg.id)::int as total_sessions,
+        SUM(CASE WHEN r.status = 'present' THEN 1 ELSE 0 END)::int as present_sessions
       FROM students s
       LEFT JOIN attendance_records r ON s.id = r.student_id
       LEFT JOIN attendance_registers reg ON r.register_id = reg.id AND reg.session = 'morning'
-      GROUP BY s.id
-    `);
-
-    const students = stmt.all() as any[];
+      GROUP BY s.id, s.name, s.stream, s.guardian_name, s.guardian_phone, s.guardian_email
+    `;
     
     // Format response and inject baseline statistics
     const result = students.map(s => {

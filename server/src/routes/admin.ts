@@ -1,5 +1,5 @@
 import { Router, type Response } from 'express';
-import { db } from '../db.js';
+import { sql } from '../db.js';
 import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
@@ -16,42 +16,42 @@ router.use((req: AuthRequest, res: Response, next) => {
 });
 
 // GET /api/admin/metrics - Compute dashboard statistics strip
-router.get('/metrics', (req: AuthRequest, res: Response) => {
+router.get('/metrics', async (req: AuthRequest, res: Response) => {
   try {
     const todayStr = new Date().toISOString().split('T')[0];
 
     // 1. Total Enrollment
-    const enrollment = db.prepare('SELECT COUNT(*) as count FROM students').get() as { count: number };
+    const [enrollment] = await sql`SELECT COUNT(*)::int as count FROM students`;
 
     // 2. Completed registers today
-    const loggedRegs = db.prepare(`
-      SELECT COUNT(*) as count FROM attendance_registers 
-      WHERE date = ?
-    `).get(todayStr) as { count: number };
+    const [loggedRegs] = await sql`
+      SELECT COUNT(*)::int as count FROM attendance_registers 
+      WHERE date = ${todayStr}
+    `;
 
     // 3. Today's expected registers
-    const totalTeachers = db.prepare('SELECT COUNT(*) as count FROM teachers').get() as { count: number };
-    const expectedRegs = totalTeachers.count * 2; // morning + evening per teacher
+    const [totalTeachers] = await sql`SELECT COUNT(*)::int as count FROM teachers`;
+    const expectedRegs = (totalTeachers?.count || 0) * 2; // morning + evening per teacher
 
     // 4. Calculate today's morning check-in attendance rate
     let dailyRate = 96; // Fallback seed
-    const attendanceStats = db.prepare(`
+    const [attendanceStats] = await sql`
       SELECT 
-        COUNT(r.id) as total_records,
-        SUM(CASE WHEN r.status = 'present' THEN 1 ELSE 0 END) as present_records
+        COUNT(r.id)::int as total_records,
+        SUM(CASE WHEN r.status = 'present' THEN 1 ELSE 0 END)::int as present_records
       FROM attendance_records r
       JOIN attendance_registers reg ON r.register_id = reg.id
-      WHERE reg.date = ? AND reg.session = 'morning'
-    `).get(todayStr) as { total_records: number; present_records: number };
+      WHERE reg.date = ${todayStr} AND reg.session = 'morning'
+    `;
 
     if (attendanceStats && attendanceStats.total_records > 0) {
       dailyRate = Math.round((attendanceStats.present_records / attendanceStats.total_records) * 100);
     }
 
     res.json({
-      totalStudents: enrollment.count,
+      totalStudents: enrollment?.count || 0,
       todayAttendanceRate: dailyRate,
-      loggedRegistersCount: loggedRegs.count,
+      loggedRegistersCount: loggedRegs?.count || 0,
       totalExpectedRegisters: expectedRegs
     });
   } catch (error: any) {
@@ -60,11 +60,11 @@ router.get('/metrics', (req: AuthRequest, res: Response) => {
 });
 
 // GET /api/admin/registers-summary - List morning/evening checklist completion per teacher
-router.get('/registers-summary', (req: AuthRequest, res: Response) => {
+router.get('/registers-summary', async (req: AuthRequest, res: Response) => {
   try {
     const todayStr = new Date().toISOString().split('T')[0];
 
-    const stmt = db.prepare(`
+    const summary = await sql`
       SELECT 
         t.id as teacher_id,
         t.name as teacher_name,
@@ -73,11 +73,9 @@ router.get('/registers-summary', (req: AuthRequest, res: Response) => {
         m_reg.submitted_at as morning_submitted,
         e_reg.submitted_at as evening_submitted
       FROM teachers t
-      LEFT JOIN attendance_registers m_reg ON t.id = m_reg.teacher_id AND m_reg.date = ? AND m_reg.session = 'morning'
-      LEFT JOIN attendance_registers e_reg ON t.id = e_reg.teacher_id AND e_reg.date = ? AND e_reg.session = 'evening'
-    `);
-
-    const summary = stmt.all(todayStr, todayStr) as any[];
+      LEFT JOIN attendance_registers m_reg ON t.id = m_reg.teacher_id AND m_reg.date = ${todayStr} AND m_reg.session = 'morning'
+      LEFT JOIN attendance_registers e_reg ON t.id = e_reg.teacher_id AND e_reg.date = ${todayStr} AND e_reg.session = 'evening'
+    `;
 
     const formatted = summary.map(row => ({
       teacherId: row.teacher_id,
@@ -95,15 +93,14 @@ router.get('/registers-summary', (req: AuthRequest, res: Response) => {
 });
 
 // GET /api/admin/timetable - Retrieve classroom scheduling timeline
-router.get('/timetable', (req: AuthRequest, res: Response) => {
+router.get('/timetable', async (req: AuthRequest, res: Response) => {
   try {
-    const stmt = db.prepare(`
+    const events = await sql`
       SELECT e.*, t.name as teacher_name 
       FROM timetable_events e
       JOIN teachers t ON e.teacher_id = t.id
       ORDER BY e.start_time ASC
-    `);
-    const events = stmt.all() as any[];
+    `;
 
     res.json(events);
   } catch (error) {
@@ -112,7 +109,7 @@ router.get('/timetable', (req: AuthRequest, res: Response) => {
 });
 
 // POST /api/admin/broadcast - Log high fidelity multi-channel parental announcement
-router.post('/broadcast', (req: AuthRequest, res: Response): void => {
+router.post('/broadcast', async (req: AuthRequest, res: Response): Promise<void> => {
   const { message, timestamp } = req.body;
 
   if (!message || !timestamp) {
@@ -122,26 +119,24 @@ router.post('/broadcast', (req: AuthRequest, res: Response): void => {
 
   try {
     const logId = `LOG_${Date.now()}`;
-    const insertStmt = db.prepare(`
+    await sql`
       INSERT INTO comm_logs (
         id, timestamp, message, 
         whatsapp_status, whatsapp_trace, 
         sms_status, sms_trace, 
         email_status, email_trace
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    insertStmt.run(
-      logId,
-      timestamp,
-      message,
-      'read',
-      `POST /v19.0/messages HTTP/1.1 -> Host: graph.facebook.com -> Content-Type: application/json -> payload: template_name: "school_notice_v1", variables: ["${message}"] -> Response: HTTP 200 OK (id: wamid.HBgLMjU0NzEyMzQ1Njc4FQIAERg)`,
-      'sent',
-      `POST /messaging HTTP/1.1 -> Host: api.africastalking.com -> payload: to: ["+254712345678", "+254722987654"...], from: "STCHARLES" -> Response: Carrier Status=Success, Sent to Safaricom SMSC Network`,
-      'delivered',
-      `SMTP Connect -> Host: mail.sendgrid.net -> AUTH SUCCESS -> MAIL FROM: info@stcharles.sc.ke -> RCPT TO: james.kamau@email.com, peter.njo@email.com... -> DATA ACCEPTED (Queue ID: sg.250-ok)`
-    );
+      ) VALUES (
+        ${logId},
+        ${timestamp},
+        ${message},
+        'read',
+        ${`POST /v19.0/messages HTTP/1.1 -> Host: graph.facebook.com -> Content-Type: application/json -> payload: template_name: "school_notice_v1", variables: ["${message}"] -> Response: HTTP 200 OK (id: wamid.HBgLMjU0NzEyMzQ1Njc4FQIAERg)`},
+        'sent',
+        ${`POST /messaging HTTP/1.1 -> Host: api.africastalking.com -> payload: to: ["+254712345678", "+254722987654"...], from: "STCHARLES" -> Response: Carrier Status=Success, Sent to Safaricom SMSC Network`},
+        'delivered',
+        ${`SMTP Connect -> Host: mail.sendgrid.net -> AUTH SUCCESS -> MAIL FROM: info@stcharles.sc.ke -> RCPT TO: james.kamau@email.com, peter.njo@email.com... -> DATA ACCEPTED (Queue ID: sg.250-ok)`}
+      )
+    `;
 
     res.status(201).json({ success: true, logId });
   } catch (error: any) {
@@ -150,7 +145,7 @@ router.post('/broadcast', (req: AuthRequest, res: Response): void => {
 });
 
 // POST /api/admin/timetable - Create a new timetable event
-router.post('/timetable', (req: AuthRequest, res: Response): void => {
+router.post('/timetable', async (req: AuthRequest, res: Response): Promise<void> => {
   const { teacherId, subject, stream, startTime, endTime, room } = req.body;
 
   if (!teacherId || !subject || !stream || startTime === undefined || endTime === undefined || !room) {
@@ -159,15 +154,14 @@ router.post('/timetable', (req: AuthRequest, res: Response): void => {
   }
 
   try {
-    const countStmt = db.prepare('SELECT COUNT(*) as count FROM timetable_events');
-    const { count } = countStmt.get() as { count: number };
+    const [countResult] = await sql`SELECT COUNT(*)::int as count FROM timetable_events`;
+    const count = countResult ? countResult.count : 0;
     const newId = `E${String(count + 1).padStart(3, '0')}`;
 
-    const insertStmt = db.prepare(`
+    await sql`
       INSERT INTO timetable_events (id, teacher_id, subject, stream, start_time, end_time, room)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-    insertStmt.run(newId, teacherId, subject, stream, startTime, endTime, room);
+      VALUES (${newId}, ${teacherId}, ${subject}, ${stream}, ${startTime}, ${endTime}, ${room})
+    `;
 
     res.status(201).json({ success: true, event: { id: newId, teacher_id: teacherId, subject, stream, start_time: startTime, end_time: endTime, room } });
   } catch (error: any) {
@@ -177,7 +171,7 @@ router.post('/timetable', (req: AuthRequest, res: Response): void => {
 });
 
 // PUT /api/admin/timetable/:id - Update a timetable event
-router.put('/timetable/:id', (req: AuthRequest, res: Response): void => {
+router.put('/timetable/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
   const { teacherId, subject, stream, startTime, endTime, room } = req.body;
 
@@ -187,18 +181,16 @@ router.put('/timetable/:id', (req: AuthRequest, res: Response): void => {
   }
 
   try {
-    const existsStmt = db.prepare('SELECT id FROM timetable_events WHERE id = ?');
-    const exists = existsStmt.get(id);
+    const [exists] = await sql`SELECT id FROM timetable_events WHERE id = ${id}`;
     if (!exists) {
       res.status(404).json({ error: 'Timetable event not found.' });
       return;
     }
 
-    const updateStmt = db.prepare(`
-      UPDATE timetable_events SET teacher_id = ?, subject = ?, stream = ?, start_time = ?, end_time = ?, room = ?
-      WHERE id = ?
-    `);
-    updateStmt.run(teacherId, subject, stream, startTime, endTime, room, id);
+    await sql`
+      UPDATE timetable_events SET teacher_id = ${teacherId}, subject = ${subject}, stream = ${stream}, start_time = ${startTime}, end_time = ${endTime}, room = ${room}
+      WHERE id = ${id}
+    `;
 
     res.json({ success: true, event: { id, teacher_id: teacherId, subject, stream, start_time: startTime, end_time: endTime, room } });
   } catch (error: any) {
@@ -208,19 +200,17 @@ router.put('/timetable/:id', (req: AuthRequest, res: Response): void => {
 });
 
 // DELETE /api/admin/timetable/:id - Remove a timetable event
-router.delete('/timetable/:id', (req: AuthRequest, res: Response): void => {
+router.delete('/timetable/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
 
   try {
-    const existsStmt = db.prepare('SELECT id FROM timetable_events WHERE id = ?');
-    const exists = existsStmt.get(id);
+    const [exists] = await sql`SELECT id FROM timetable_events WHERE id = ${id}`;
     if (!exists) {
       res.status(404).json({ error: 'Timetable event not found.' });
       return;
     }
 
-    const deleteStmt = db.prepare('DELETE FROM timetable_events WHERE id = ?');
-    deleteStmt.run(id);
+    await sql`DELETE FROM timetable_events WHERE id = ${id}`;
 
     res.json({ success: true, message: `Timetable event ${id} removed.` });
   } catch (error: any) {
@@ -230,31 +220,30 @@ router.delete('/timetable/:id', (req: AuthRequest, res: Response): void => {
 });
 
 // GET /api/admin/attendance-history - Query historical attendance data
-router.get('/attendance-history', (req: AuthRequest, res: Response): void => {
+router.get('/attendance-history', async (req: AuthRequest, res: Response): Promise<void> => {
   const { from, to } = req.query;
   const fromDate = from ? String(from) : new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
   const toDate = to ? String(to) : new Date().toISOString().split('T')[0];
 
   try {
-    const stmt = db.prepare(`
+    const history = await sql`
       SELECT 
         reg.date,
         reg.session,
         t.name as teacher_name,
         t.stream,
-        COUNT(r.id) as total_students,
-        SUM(CASE WHEN r.status = 'present' THEN 1 ELSE 0 END) as present_count,
-        SUM(CASE WHEN r.status = 'absent' THEN 1 ELSE 0 END) as absent_count,
+        COUNT(r.id)::int as total_students,
+        SUM(CASE WHEN r.status = 'present' THEN 1 ELSE 0 END)::int as present_count,
+        SUM(CASE WHEN r.status = 'absent' THEN 1 ELSE 0 END)::int as absent_count,
         reg.submitted_at
       FROM attendance_registers reg
       JOIN teachers t ON reg.teacher_id = t.id
       LEFT JOIN attendance_records r ON r.register_id = reg.id
-      WHERE reg.date >= ? AND reg.date <= ?
-      GROUP BY reg.id
+      WHERE reg.date >= ${fromDate} AND reg.date <= ${toDate}
+      GROUP BY reg.id, reg.date, reg.session, t.name, t.stream, reg.submitted_at
       ORDER BY reg.date DESC, reg.session ASC
-    `);
+    `;
 
-    const history = stmt.all(fromDate, toDate) as any[];
     res.json(history);
   } catch (error: any) {
     console.error('Error fetching attendance history:', error);

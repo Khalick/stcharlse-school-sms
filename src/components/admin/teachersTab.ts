@@ -4,7 +4,7 @@ import { showPasswordModal, showConfirm } from './studentsTab';
 
 export async function renderTeachersTab(container: HTMLElement): Promise<void> {
   const teachers = await apiClient.get<any[]>('/teachers');
-  
+
   container.innerHTML = `
     <div class="card-header-with-action">
       <h2 class="card-title">Teacher Staff Directory</h2>
@@ -20,6 +20,7 @@ export async function renderTeachersTab(container: HTMLElement): Promise<void> {
             <th>Phone</th>
             <th>Subject</th>
             <th>Class Stream</th>
+            <th>Status</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -33,7 +34,13 @@ export async function renderTeachersTab(container: HTMLElement): Promise<void> {
               <td>${t.subject}</td>
               <td>${t.stream}</td>
               <td>
+                ${t.approved 
+                  ? '<span class="badge badge-success">Approved</span>' 
+                  : '<span class="badge badge-warning" style="background:#FEF3C7; color:#D97706;">Pending</span>'}
+              </td>
+              <td>
                 <div class="action-btn-group">
+                  ${!t.approved ? `<button class="btn-action" data-action="approve-tch" data-id="${t.id}" style="background:#10B981; color:#fff; border:none; padding:4px 8px; border-radius:4px; font-weight:600; cursor:pointer;">Approve</button>` : ''}
                   <button class="btn-action" data-action="edit-tch" data-id="${t.id}">Edit</button>
                   <button class="btn-action warning" data-action="pwd-tch" data-id="${t.id}">Reset Pwd</button>
                   <button class="btn-action danger" data-action="del-tch" data-id="${t.id}">Delete</button>
@@ -41,12 +48,26 @@ export async function renderTeachersTab(container: HTMLElement): Promise<void> {
               </td>
             </tr>
           `).join('')}
-          ${teachers.length === 0 ? '<tr><td colspan="7" style="text-align:center;color:var(--text-light)">No teachers registered in directory</td></tr>' : ''}
+          ${teachers.length === 0 ? '<tr><td colspan="8" style="text-align:center;color:var(--text-light)">No teachers registered in directory</td></tr>' : ''}
         </tbody>
       </table>
     </div>
     <div id="tch-modal-container"></div>
   `;
+
+  // Bind Approve clicks
+  container.querySelectorAll('[data-action="approve-tch"]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const teacherId = (btn as HTMLElement).dataset.id!;
+      try {
+        await apiClient.put(`/teachers/${teacherId}/approve`, {});
+        triggerToastNotification('Teacher Approved', `Teacher ${teacherId} has been approved successfully.`);
+        renderTeachersTab(container);
+      } catch (err: any) {
+        triggerToastNotification('Approval Failed', err.message, 'danger');
+      }
+    });
+  });
 
   // Bind Add Teacher click
   container.querySelector('#btn-add-teacher')?.addEventListener('click', () => {
@@ -87,6 +108,7 @@ export async function renderTeachersTab(container: HTMLElement): Promise<void> {
       });
     });
   });
+
 }
 
 function showTeacherModal(container: HTMLElement, teacher: any | null): void {
@@ -172,4 +194,5 @@ function showTeacherModal(container: HTMLElement, teacher: any | null): void {
       triggerToastNotification('Save Failed', err.message, 'danger');
     }
   });
+
 }

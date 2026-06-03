@@ -36,14 +36,20 @@ git push -u origin main
 
 ---
 
-## 3. Deploying the Backend Server (e.g. Render / Heroku)
-Since we have integrated Vercel Serverless Functions, you can deploy **both the frontend and backend together on Vercel** under the same domain.
+## 3. Environment Variables & Setup
+To run the server locally or host on Vercel, you need to configure the following environment variables:
 
-### Required Environment Variables in Vercel:
-Configure these environment variables in your Vercel Project Settings:
-- `GROQ_API_KEY`: `your_groq_api_key_here` (To power Llama 3 AI timetable parsing and student chat)
-- `JWT_SECRET`: `stcharles_jwt_private_key_2026` (Or any strong unique custom string to sign session security tokens)
-- `VITE_API_URL`: (Optional) Leave this blank to automatically route all API requests to the bundled Vercel Serverless Function, or set it to an external backend if desired.
+- `DATABASE_URL`: Your Supabase transaction connection string. You can retrieve this from **Supabase Dashboard** -> **Settings** -> **Database** -> **Connection string** (Choose URI format, e.g. `postgresql://postgres:[password]@db.xxxx.supabase.co:5432/postgres?sslmode=require`).
+- `GROQ_API_KEY`: Your Groq API key (to power the Llama 3 AI chatbot and OCR timetable parser).
+- `JWT_SECRET`: `stcharles_jwt_private_key_2026` (Or any strong custom key for signing secure auth tokens).
+
+### Local Setup:
+Add these keys to your `server/.env` file:
+```env
+DATABASE_URL=your_supabase_postgresql_connection_string
+GROQ_API_KEY=your_groq_api_key
+JWT_SECRET=stcharles_jwt_private_key_2026
+```
 
 ---
 
@@ -55,8 +61,8 @@ Configure these environment variables in your Vercel Project Settings:
    - **Root Directory**: `./` (Keep as the root of the repository)
    - **Build Command**: `npm run build`
    - **Output Directory**: `dist`
-   - **Environment Variables**: Add `GROQ_API_KEY` and `JWT_SECRET` as defined above.
+   - **Environment Variables**: Add `DATABASE_URL`, `GROQ_API_KEY`, and `JWT_SECRET`.
 4. Click **Deploy**!
 
-Your stunning Ivy League digital management campus and server backend will be live and active on the web in seconds!
+Your stunning digital management campus and server backend will be live and active on the web in seconds!
 
