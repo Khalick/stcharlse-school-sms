@@ -120,7 +120,7 @@ Each event must contain:
 - "startTime": string in HH:MM format (e.g. "08:15", "10:30")
 - "endTime": string in HH:MM format (e.g. "09:00", "11:15")
 - "subject": string (e.g. "Science", "Mathematics", "Kiswahili", "English")
-- "stream": string (Must match exactly one of: "Grade 7A", "Grade 8", "Grade 9")
+- "stream": string (Must match one of: "Pre-Primary 1", "Pre-Primary 2", "Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6", "Grade 7A", "Grade 8", "Grade 9")
 - "teacherName": string (e.g. "Agnes", "Mark", "Beatrice", "Neri")
 - "room": string (e.g. "Room 4", "Room 5 (Workshop)")
 

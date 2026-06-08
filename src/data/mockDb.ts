@@ -25,6 +25,7 @@ export interface SessionUser {
   role: 'admin' | 'teacher' | 'student';
   stream?: string;
   email?: string;
+  assignments?: { className: string; subjectName: string }[];
 }
 
 export interface AttendanceRecord {

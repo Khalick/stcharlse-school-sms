@@ -208,6 +208,11 @@ export function renderSimulatorBar(): void {
         <button class="sim-btn ${db.isTimeRunning && db.timeSpeed === 10 ? 'active' : ''}" id="btn-sim-10x" data-speed="10">10 min/s</button>
         <button class="sim-btn ${db.isTimeRunning && db.timeSpeed === 60 ? 'active' : ''}" id="btn-sim-60x" data-speed="60">1 hr/s</button>
       </div>
+
+      <!-- Operations Guide -->
+      <div class="sim-controls">
+        <button class="sim-btn" id="btn-show-guide" style="background:var(--accent); color:var(--text-light); font-weight:600; border: 1px solid var(--accent);">Operations Guide</button>
+      </div>
     </div>
   `;
   
@@ -248,4 +253,86 @@ export function renderSimulatorBar(): void {
       renderSimulatorBar();
     });
   });
+
+  // Bind operations guide button
+  container.querySelector('#btn-show-guide')?.addEventListener('click', () => {
+    showOperationsGuide();
+  });
+}
+
+function showOperationsGuide(): void {
+  if (document.getElementById('sim-guide-modal')) return;
+
+  const modal = document.createElement('div');
+  modal.id = 'sim-guide-modal';
+  modal.className = 'modal-overlay';
+  modal.style.zIndex = '99999';
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width: 700px; max-height: 85vh; overflow-y: auto;">
+      <div class="modal-header" style="border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 16px;">
+        <h3 style="margin:0; font-size:1.3rem; display:flex; align-items:center; gap:8px; color:var(--text);">
+          🎓 St. Charles Academy — Operations & Workflow Guide
+        </h3>
+        <button class="modal-close-btn" id="close-guide-modal" style="font-size:1.5rem; background:none; border:none; cursor:pointer;">×</button>
+      </div>
+      <div class="modal-body" style="display:flex; flex-direction:column; gap:20px; color:#E2E8F0; line-height:1.6; font-size:0.9rem;">
+        
+        <section style="background: rgba(30, 41, 59, 0.5); padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
+          <h4 style="margin: 0 0 8px 0; color: var(--accent); font-size: 1rem;">🕒 1. Virtual Clock & Timeline Presets</h4>
+          <p style="margin: 0;">
+            The simulator features a virtual day cycle running continuously. You can use the buttons to <strong>Jump to</strong> different times to simulate school activities:
+          </p>
+          <ul style="margin: 8px 0 0 0; padding-left: 20px;">
+            <li><strong>8:15 AM</strong>: Roll call period. Teachers should submit their Morning Register.</li>
+            <li><strong>8:31 AM</strong>: Late morning check. Fired warnings for overdue teacher registers.</li>
+            <li><strong>3:55 PM / 4:01 PM</strong>: Evening register submission window and checkouts.</li>
+          </ul>
+        </section>
+
+        <section style="background: rgba(30, 41, 59, 0.5); padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
+          <h4 style="margin: 0 0 8px 0; color: var(--accent); font-size: 1rem;">📝 2. Teacher Registers & Attendance Alerts</h4>
+          <p style="margin: 0;">
+            Every morning (before 8:30 AM) and evening (before 4:00 PM), teachers must submit registers for their assigned class:
+          </p>
+          <ul style="margin: 8px 0 0 0; padding-left: 20px;">
+            <li><strong>Submission</strong>: Log in as a teacher, go to <strong>Attendance Registers</strong>, mark students, and click <strong>Submit Register</strong>.</li>
+            <li><strong>Late Penalties</strong>: If the virtual time passes 8:30 AM or 4:00 PM without register submission, warning bells sound, and the teacher is marked <span class="badge badge-danger">LATE</span> in the Admin dashboard tracker.</li>
+            <li><strong>Parental Absence Alert</strong>: Marking a student <strong>Absent</strong> automatically triggers a simulated SMS, WhatsApp, and Email notification to their guardian. Check the logs under the Admin's carrier console!</li>
+          </ul>
+        </section>
+
+        <section style="background: rgba(30, 41, 59, 0.5); padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
+          <h4 style="margin: 0 0 8px 0; color: var(--accent); font-size: 1rem;">📅 3. Schedule Alerts & AI Timetable Import</h4>
+          <p style="margin: 0;">
+            Classes follow the schedule list. The system rings a bell <strong>5 minutes before class starts</strong> to notify students and teachers. Admins can manage this in two ways:
+          </p>
+          <ul style="margin: 8px 0 0 0; padding-left: 20px;">
+            <li><strong>Manual Scheduler</strong>: Admin can manually add schedule periods specifying subjects, rooms, times, and streams.</li>
+            <li><strong>AI Parser (Llama 3)</strong>: Click <strong>Bulk Import Timetable (AI)</strong>. You can paste structured timetable text or drag-and-drop a scheduler image. Llama 3 automatically parses times, streams, rooms, and resolves teacher matches.</li>
+          </ul>
+        </section>
+
+        <section style="background: rgba(30, 41, 59, 0.5); padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
+          <h4 style="margin: 0 0 8px 0; color: var(--accent); font-size: 1rem;">📢 4. Parental Broadcaster & Live Gateway Logs</h4>
+          <p style="margin: 0;">
+            Admins can send high-priority announcements from the dashboard:
+          </p>
+          <ul style="margin: 8px 0 0 0; padding-left: 20px;">
+            <li><strong>Targeting</strong>: Choose target audience: <em>All Grades</em>, a <em>Specific Grade</em>, or a <em>Specific Parent</em>.</li>
+            <li><strong>Simulated Carriers</strong>: The system generates live carrier response headers (WhatsApp Meta API, Safaricom SMS AfricasTalking, SendGrid SMTP server dispatches) displaying the exact recipient contacts in the log terminal.</li>
+          </ul>
+        </section>
+        
+      </div>
+      <div class="modal-footer" style="border-top: 1px solid var(--border); padding-top: 12px; margin-top: 16px; display:flex; justify-content:flex-end;">
+        <button class="btn-primary" id="btn-close-guide" style="padding:8px 16px;">Got It!</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  const close = () => modal.remove();
+  modal.querySelector('#close-guide-modal')?.addEventListener('click', close);
+  modal.querySelector('#btn-close-guide')?.addEventListener('click', close);
 }

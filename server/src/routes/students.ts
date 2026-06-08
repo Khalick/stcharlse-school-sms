@@ -16,12 +16,13 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
         s.id,
         s.name,
         s.stream,
-        s.guardian_name,
-        s.guardian_phone,
-        s.guardian_email,
+        p.name as guardian_name,
+        p.phone as guardian_phone,
+        p.email as guardian_email,
         COUNT(reg.id)::int as total_sessions,
         SUM(CASE WHEN r.status = 'present' THEN 1 ELSE 0 END)::int as present_sessions
       FROM students s
+      JOIN parents p ON s.parent_id = p.id
       LEFT JOIN attendance_records r ON s.id = r.student_id
       LEFT JOIN attendance_registers reg ON r.register_id = reg.id AND reg.session = 'morning'
     `;
@@ -33,7 +34,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
       query = sql`${query} WHERE LOWER(s.name) LIKE ${filter} OR LOWER(s.stream) LIKE ${filter} OR LOWER(s.id) LIKE ${filter}`;
     }
 
-    query = sql`${query} GROUP BY s.id, s.name, s.stream, s.guardian_name, s.guardian_phone, s.guardian_email`;
+    query = sql`${query} GROUP BY s.id, s.name, s.stream, p.name, p.phone, p.email`;
 
     const students = await query;
 
@@ -104,7 +105,30 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response): Pro
   }
 
   try {
-    // Generate next student ID reference Sxxx
+    // 1. Parent Deduplication / Creation
+    const emailNormalized = guardianEmail.trim().toLowerCase();
+    const phoneNormalized = guardianPhone.trim();
+
+    let [parent] = await sql`
+      SELECT id FROM parents 
+      WHERE LOWER(email) = ${emailNormalized} OR phone = ${phoneNormalized}
+    `;
+
+    let parentId = parent?.id;
+
+    if (!parentId) {
+      const [parentCount] = await sql`SELECT COUNT(*)::int as count FROM parents`;
+      const nextParentNum = (parentCount?.count || 0) + 1;
+      parentId = `P${String(nextParentNum).padStart(3, '0')}`;
+      
+      const defaultPasswordHash = hashPassword('parent123');
+      await sql`
+        INSERT INTO parents (id, name, phone, email, password)
+        VALUES (${parentId}, ${guardianName.trim()}, ${phoneNormalized}, ${emailNormalized}, ${defaultPasswordHash})
+      `;
+    }
+
+    // 2. Generate next student ID reference Sxxx
     const [countResult] = await sql`SELECT COUNT(*)::int as count FROM students`;
     const count = countResult ? countResult.count : 0;
     const nextIdNum = count + 1;
@@ -112,10 +136,9 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response): Pro
 
     const hashedPassword = hashPassword(newId);
     await sql`
-      INSERT INTO students (id, name, stream, guardian_name, guardian_phone, guardian_email, password)
-      VALUES (${newId}, ${name}, ${stream}, ${guardianName}, ${guardianPhone}, ${guardianEmail}, ${hashedPassword})
+      INSERT INTO students (id, name, stream, parent_id, password)
+      VALUES (${newId}, ${name}, ${stream}, ${parentId}, ${hashedPassword})
     `;
-
 
     res.status(201).json({
       success: true,
@@ -142,7 +165,6 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response): P
     return;
   }
 
-
   const { id } = req.params;
   const { name, stream, guardianName, guardianPhone, guardianEmail } = req.body;
 
@@ -152,14 +174,64 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response): P
   }
 
   try {
-    const [exists] = await sql`SELECT id FROM students WHERE id = ${id}`;
-    if (!exists) {
+    const [currentStudent] = await sql`SELECT parent_id FROM students WHERE id = ${id}`;
+    if (!currentStudent) {
       res.status(404).json({ error: 'Student record not found.' });
       return;
     }
 
+    const emailNormalized = guardianEmail.trim().toLowerCase();
+    const phoneNormalized = guardianPhone.trim();
+
+    // Check if there is an existing parent (other than current) matching the phone/email
+    const [matchingParent] = await sql`
+      SELECT id FROM parents 
+      WHERE (LOWER(email) = ${emailNormalized} OR phone = ${phoneNormalized})
+        AND id <> ${currentStudent.parent_id}
+    `;
+
+    let finalParentId = currentStudent.parent_id;
+
+    if (matchingParent) {
+      // Link to the other matching parent
+      finalParentId = matchingParent.id;
+
+      // Check if old parent is now orphaned
+      const oldParentId = currentStudent.parent_id;
+      const [siblingCheck] = await sql`
+        SELECT COUNT(*)::int as count FROM students 
+        WHERE parent_id = ${oldParentId} AND id <> ${id}
+      `;
+
+      if (siblingCheck && siblingCheck.count === 0) {
+        const [oldParent] = await sql`SELECT name FROM parents WHERE id = ${oldParentId}`;
+        const parentName = oldParent ? oldParent.name : 'Unknown Parent';
+        const notifyId = `ORPHAN_${Date.now()}_${oldParentId}`;
+        const timestampStr = new Date().toLocaleTimeString('en-US', { hour12: false }).slice(0, 5);
+
+        await sql`
+          INSERT INTO comm_logs (id, timestamp, message, whatsapp_status, sms_status, email_status)
+          VALUES (
+            ${notifyId},
+            ${timestampStr},
+            ${`Orphaned Parent Alert: Parent ${parentName} (${oldParentId}) has no active students. Admin choice required to Delete or Retain.`},
+            'sent', 'sent', 'sent'
+          )
+        `;
+      }
+    } else {
+      // Update current parent profile
+      await sql`
+        UPDATE parents 
+        SET name = ${guardianName.trim()}, phone = ${phoneNormalized}, email = ${emailNormalized}
+        WHERE id = ${currentStudent.parent_id}
+      `;
+    }
+
+    // Update student details
     await sql`
-      UPDATE students SET name = ${name}, stream = ${stream}, guardian_name = ${guardianName}, guardian_phone = ${guardianPhone}, guardian_email = ${guardianEmail}
+      UPDATE students 
+      SET name = ${name}, stream = ${stream}, parent_id = ${finalParentId}
       WHERE id = ${id}
     `;
 
@@ -177,12 +249,11 @@ router.delete('/:id', authenticateToken, async (req: AuthRequest, res: Response)
     return;
   }
 
-
   const { id } = req.params;
 
   try {
-    const [exists] = await sql`SELECT id FROM students WHERE id = ${id}`;
-    if (!exists) {
+    const [student] = await sql`SELECT parent_id FROM students WHERE id = ${id}`;
+    if (!student) {
       res.status(404).json({ error: 'Student record not found.' });
       return;
     }
@@ -190,6 +261,28 @@ router.delete('/:id', authenticateToken, async (req: AuthRequest, res: Response)
     // Remove attendance records first, then student
     await sql`DELETE FROM attendance_records WHERE student_id = ${id}`;
     await sql`DELETE FROM students WHERE id = ${id}`;
+
+    // Check if the parent is now orphaned (has no other students)
+    const parentId = student.parent_id;
+    const [parentCheck] = await sql`SELECT COUNT(*)::int as count FROM students WHERE parent_id = ${parentId}`;
+
+    if (parentCheck && parentCheck.count === 0) {
+      const [parent] = await sql`SELECT name FROM parents WHERE id = ${parentId}`;
+      const parentName = parent ? parent.name : 'Unknown Parent';
+      const notifyId = `ORPHAN_${Date.now()}_${parentId}`;
+      const timestampStr = new Date().toLocaleTimeString('en-US', { hour12: false }).slice(0, 5);
+
+      // Log orphaned alert notification to comm_logs for Admin action
+      await sql`
+        INSERT INTO comm_logs (id, timestamp, message, whatsapp_status, sms_status, email_status)
+        VALUES (
+          ${notifyId},
+          ${timestampStr},
+          ${`Orphaned Parent Alert: Parent ${parentName} (${parentId}) has no active students. Admin choice required to Delete or Retain.`},
+          'sent', 'sent', 'sent'
+        )
+      `;
+    }
 
     res.json({ success: true, message: `Student ${id} removed from directory.` });
   } catch (error: any) {

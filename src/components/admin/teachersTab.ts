@@ -143,9 +143,7 @@ function showTeacherModal(container: HTMLElement, teacher: any | null): void {
             <div class="form-group">
               <label for="tf-stream">Assigned Class Stream</label>
               <select id="tf-stream" class="form-control" required style="font-family: inherit;">
-                <option value="Grade 7A" ${teacher?.stream === 'Grade 7A' ? 'selected' : ''}>Grade 7A</option>
-                <option value="Grade 8" ${teacher?.stream === 'Grade 8' ? 'selected' : ''}>Grade 8</option>
-                <option value="Grade 9" ${teacher?.stream === 'Grade 9' ? 'selected' : ''}>Grade 9</option>
+                ${['Pre-Primary 1', 'Pre-Primary 2', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7A', 'Grade 8', 'Grade 9'].map(g => `<option value="${g}" ${teacher?.stream === g ? 'selected' : ''}>${g}</option>`).join('')}
               </select>
             </div>
           </div>

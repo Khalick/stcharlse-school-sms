@@ -5,14 +5,14 @@ import { getDb } from '../../data/mockDb';
 
 let searchQuery = '';
 
-export async function renderStudentsTab(container: HTMLElement): Promise<void> {
+export async function renderStudentsTab(container: HTMLElement, streamFilter?: string, forceReadOnly?: boolean): Promise<void> {
   const db = getDb();
   const isTeacher = db.currentUser?.role === 'teacher';
   
   let students: any[] = [];
   try {
     if (isTeacher) {
-      students = await apiClient.get<any[]>(`/teachers/${db.currentUser?.id || ''}/students`);
+      students = await apiClient.get<any[]>(`/teachers/${db.currentUser?.id || ''}/students${streamFilter ? '?stream=' + encodeURIComponent(streamFilter) : ''}`);
       if (searchQuery) {
         const query = searchQuery.trim().toLowerCase();
         students = students.filter(s => 
@@ -28,9 +28,11 @@ export async function renderStudentsTab(container: HTMLElement): Promise<void> {
     triggerToastNotification('Error', 'Failed to retrieve students: ' + err.message, 'danger');
   }
 
+  const isReadOnlyWorkspace = forceReadOnly || (students.length > 0 && students[0].isReadOnly);
+
   container.innerHTML = `
     <div class="card-header-with-action"><h2 class="card-title">${isTeacher ? 'Class Students Roster' : 'Student Directory'}</h2>
-      <button class="btn-accent" id="btn-open-admission">Register New Student</button></div>
+      ${isReadOnlyWorkspace ? '' : '<button class="btn-accent" id="btn-open-admission">Register New Student</button>'}</div>
     <div class="search-bar-container">
       <input type="text" id="stu-search" class="form-control" placeholder="Search by name, stream, or ID..." value="${searchQuery}">
       <button class="btn-primary" id="btn-stu-search">Search</button>
@@ -40,12 +42,14 @@ export async function renderStudentsTab(container: HTMLElement): Promise<void> {
     </tr></thead><tbody>
       ${students.map(s => `<tr>
         <td><strong>${s.id}</strong></td><td>${s.name}</td><td>${s.stream}</td>
-        <td>${s.guardianName} (${s.guardianPhone})</td>
+        <td>${s.guardianName} ${s.guardianPhone ? `(${s.guardianPhone})` : ''}</td>
         <td><span class="badge ${s.attendanceRate >= 95 ? 'badge-success' : 'badge-warning'}">${s.attendanceRate}%</span></td>
         <td><div class="action-btn-group">
-          <button class="btn-action" data-action="edit-stu" data-id="${s.id}">Edit</button>
-          <button class="btn-action warning" data-action="pwd-stu" data-id="${s.id}">Reset Pwd</button>
-          <button class="btn-action danger" data-action="del-stu" data-id="${s.id}">Delete</button>
+          ${isReadOnlyWorkspace ? `<span style="font-size:0.85rem; color:var(--text-light); font-style:italic;">Read-Only (Class Teacher Only)</span>` : `
+            <button class="btn-action" data-action="edit-stu" data-id="${s.id}">Edit</button>
+            <button class="btn-action warning" data-action="pwd-stu" data-id="${s.id}">Reset Pwd</button>
+            <button class="btn-action danger" data-action="del-stu" data-id="${s.id}">Delete</button>
+          `}
         </div></td>
       </tr>`).join('')}
       ${!students.length ? '<tr><td colspan="6" style="text-align:center;color:var(--text-light)">No records found</td></tr>' : ''}
@@ -55,40 +59,46 @@ export async function renderStudentsTab(container: HTMLElement): Promise<void> {
 
 
   // Search
-  const doSearch = () => { searchQuery = (container.querySelector('#stu-search') as HTMLInputElement)?.value || ''; renderStudentsTab(container); };
+  const doSearch = () => { searchQuery = (container.querySelector('#stu-search') as HTMLInputElement)?.value || ''; renderStudentsTab(container, streamFilter, forceReadOnly); };
   container.querySelector('#btn-stu-search')?.addEventListener('click', doSearch);
   container.querySelector('#stu-search')?.addEventListener('keyup', (e) => { if ((e as KeyboardEvent).key === 'Enter') doSearch(); });
 
   // Admit
-  container.querySelector('#btn-open-admission')?.addEventListener('click', () => showStudentModal(container, null));
+  container.querySelector('#btn-open-admission')?.addEventListener('click', () => showStudentModal(container, null, streamFilter));
 
   // Actions
   container.querySelectorAll('[data-action="edit-stu"]').forEach(btn => btn.addEventListener('click', () => {
     const s = students.find(x => x.id === (btn as HTMLElement).dataset.id);
-    if (s) showStudentModal(container, s);
+    if (s) showStudentModal(container, s, streamFilter);
   }));
   container.querySelectorAll('[data-action="pwd-stu"]').forEach(btn => btn.addEventListener('click', () => showPasswordModal(container, (btn as HTMLElement).dataset.id!, 'student')));
   container.querySelectorAll('[data-action="del-stu"]').forEach(btn => btn.addEventListener('click', () => {
     const id = (btn as HTMLElement).dataset.id!;
     showConfirm(container, `Remove student ${id}?`, 'This will permanently delete the student and their attendance records.', async () => {
-      try { await apiClient.delete(`/students/${id}`); triggerToastNotification('Student Removed', `${id} deleted.`); renderStudentsTab(container); } catch (e: any) { triggerToastNotification('Error', e.message, 'danger'); }
+      try { 
+        await apiClient.delete(`/students/${id}`); 
+        triggerToastNotification('Student Removed', `${id} deleted.`); 
+        renderStudentsTab(container, streamFilter, forceReadOnly); 
+      } catch (e: any) { 
+        triggerToastNotification('Error', e.message, 'danger'); 
+      }
     });
   }));
 }
 
-function showStudentModal(container: HTMLElement, student: any | null): void {
+function showStudentModal(container: HTMLElement, student: any | null, streamFilter?: string): void {
   const mc = container.querySelector('#stu-modal-container')!;
   const isEdit = !!student;
   const db = getDb();
   const isTeacher = db.currentUser?.role === 'teacher';
+  const defaultStream = streamFilter || db.currentUser?.stream || 'Grade 7A';
 
-  
   mc.innerHTML = `<div class="modal-overlay"><div class="modal-content">
     <div class="modal-header"><h3>${isEdit ? 'Edit Student' : 'Register New Student'}</h3><button class="modal-close-btn" id="close-stu-modal">×</button></div>
     <form id="stu-form"><div class="modal-body">
       <div class="form-group"><label>Student Name</label><input type="text" id="sf-name" class="form-control" value="${student?.name || ''}" required></div>
       <div class="form-group"><label>Class Stream</label><select id="sf-stream" class="form-control" required ${isTeacher ? 'disabled' : ''}>
-        ${['Grade 7A', 'Grade 8', 'Grade 9'].map(g => `<option value="${g}" ${student?.stream === g ? 'selected' : (isTeacher && db.currentUser?.stream === g ? 'selected' : '')}>${g}</option>`).join('')}
+        ${['Pre-Primary 1', 'Pre-Primary 2', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7A', 'Grade 8', 'Grade 9'].map(g => `<option value="${g}" ${student?.stream === g ? 'selected' : (defaultStream === g ? 'selected' : '')}>${g}</option>`).join('')}
       </select></div>
       <div class="form-group"><label>Guardian Name</label><input type="text" id="sf-gname" class="form-control" value="${student?.guardianName || ''}" required></div>
       <div class="form-group"><label>Guardian Phone</label><input type="tel" id="sf-gphone" class="form-control" value="${student?.guardianPhone || '+254 '}" required></div>
@@ -105,7 +115,7 @@ function showStudentModal(container: HTMLElement, student: any | null): void {
     e.preventDefault();
     const body = {
       name: (mc.querySelector('#sf-name') as HTMLInputElement).value.trim(),
-      stream: isTeacher ? (db.currentUser?.stream || 'Grade 7A') : (mc.querySelector('#sf-stream') as HTMLSelectElement).value,
+      stream: isTeacher ? defaultStream : (mc.querySelector('#sf-stream') as HTMLSelectElement).value,
       guardianName: (mc.querySelector('#sf-gname') as HTMLInputElement).value.trim(),
       guardianPhone: (mc.querySelector('#sf-gphone') as HTMLInputElement).value.trim(),
       guardianEmail: (mc.querySelector('#sf-gemail') as HTMLInputElement).value.trim(),
@@ -118,7 +128,7 @@ function showStudentModal(container: HTMLElement, student: any | null): void {
       }
 
       triggerToastNotification(isEdit ? 'Student Updated' : 'Student Admitted', `${body.name} saved.`);
-      close(); renderStudentsTab(container);
+      close(); renderStudentsTab(container, streamFilter, isTeacher && defaultStream !== db.currentUser?.stream);
     } catch (err: any) { triggerToastNotification('Error', err.message, 'danger'); }
   });
 }

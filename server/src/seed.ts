@@ -1,49 +1,99 @@
-import { sql } from './db.js';
+import { sql, initDb } from './db.js';
 import { hashPassword } from './lib/crypto.js';
 
 async function seed() {
   try {
+    console.log('Initializing database schema...');
+    await initDb();
+
     console.log('Cleaning existing data...');
-    await sql`TRUNCATE TABLE comm_logs, timetable_events, study_materials, attendance_records, attendance_registers, students, teachers CASCADE`;
+    await sql`TRUNCATE TABLE comm_logs, timetable_events, study_materials, attendance_records, attendance_registers, students, teachers, parents, classes, class_subjects CASCADE`;
 
     console.log('Seeding initial database values...');
 
     // 1. Seed Teachers
     const teachersData = [
-      { id: 'T001', name: 'Teacher Agnes', email: 'agnes.w@stcharles.sc.ke', phone: '+254 721 111222', subject: 'Science', stream: 'Grade 7A', password: 'teacher123' },
-      { id: 'T002', name: 'Teacher Mark', email: 'mark.o@stcharles.sc.ke', phone: '+254 722 333444', subject: 'English', stream: 'Grade 8', password: 'teacher123' },
-      { id: 'T003', name: 'Teacher Beatrice', email: 'beatrice.k@stcharles.sc.ke', phone: '+254 723 555666', subject: 'Pre-Tech', stream: 'Grade 9', password: 'teacher123' }
+      { id: 'T001', name: 'Teacher Agnes', email: 'agnes.w@stcharles.sc.ke', phone: '+254 721 111222', password: 'teacher123' },
+      { id: 'T002', name: 'Teacher Mark', email: 'mark.o@stcharles.sc.ke', phone: '+254 722 333444', password: 'teacher123' },
+      { id: 'T003', name: 'Teacher Beatrice', email: 'beatrice.k@stcharles.sc.ke', phone: '+254 723 555666', password: 'teacher123' }
     ];
 
     for (const t of teachersData) {
       const hashedPassword = hashPassword(t.password);
       await sql`
-        INSERT INTO teachers (id, name, email, phone, subject, stream, password, approved)
-        VALUES (${t.id}, ${t.name}, ${t.email}, ${t.phone}, ${t.subject}, ${t.stream}, ${hashedPassword}, true)
+        INSERT INTO teachers (id, name, email, phone, password, approved)
+        VALUES (${t.id}, ${t.name}, ${t.email}, ${t.phone}, ${hashedPassword}, true)
       `;
     }
 
-    // 2. Seed Students
+    // 2. Seed Classes
+    const classesData = [
+      { name: 'Grade 7A', classTeacherId: 'T001' },
+      { name: 'Grade 8', classTeacherId: 'T002' },
+      { name: 'Grade 9', classTeacherId: 'T003' }
+    ];
+
+    for (const c of classesData) {
+      await sql`
+        INSERT INTO classes (name, class_teacher_id)
+        VALUES (${c.name}, ${c.classTeacherId})
+      `;
+    }
+
+    // 3. Seed Class Subjects
+    const classSubjectsData = [
+      { className: 'Grade 7A', subjectName: 'Science', teacherId: 'T001' },
+      { className: 'Grade 7A', subjectName: 'Kiswahili', teacherId: 'T002' },
+      { className: 'Grade 8', subjectName: 'English', teacherId: 'T002' },
+      { className: 'Grade 9', subjectName: 'Pre-Tech', teacherId: 'T003' }
+    ];
+
+    for (const cs of classSubjectsData) {
+      await sql`
+        INSERT INTO class_subjects (class_name, subject_name, teacher_id)
+        VALUES (${cs.className}, ${cs.subjectName}, ${cs.teacherId})
+      `;
+    }
+
+    // 4. Seed Parents
+    const parentsData = [
+      { id: 'P001', name: 'James Kamau', phone: '+254 712 345678', email: 'james.kamau@email.com', password: 'parent123' },
+      { id: 'P002', name: 'Peter Njoroge', phone: '+254 722 987654', email: 'peter.njo@email.com', password: 'parent123' },
+      { id: 'P003', name: 'Mary Wambui', phone: '+254 733 111222', email: 'mary.wambui@email.com', password: 'parent123' },
+      { id: 'P004', name: 'Sarah Omondi', phone: '+254 701 444555', email: 'sarah.omo@email.com', password: 'parent123' },
+      { id: 'P005', name: 'John Mutua', phone: '+254 705 666777', email: 'john.mutua@email.com', password: 'parent123' },
+      { id: 'P006', name: 'Paul Kiprop', phone: '+254 720 888999', email: 'paul.kip@email.com', password: 'parent123' },
+      { id: 'P007', name: 'Jane Chebet', phone: '+254 715 000111', email: 'jane.chebet@email.com', password: 'parent123' }
+    ];
+
+    for (const p of parentsData) {
+      const hashedPassword = hashPassword(p.password);
+      await sql`
+        INSERT INTO parents (id, name, phone, email, password)
+        VALUES (${p.id}, ${p.name}, ${p.phone}, ${p.email}, ${hashedPassword})
+      `;
+    }
+
+    // 5. Seed Students
     const studentsData = [
-      { id: 'S001', name: 'David Kamau', stream: 'Grade 7A', guardianName: 'James Kamau', guardianPhone: '+254 712 345678', guardianEmail: 'james.kamau@email.com', password: 'student123' },
-      { id: 'S002', name: 'Joseph Njoroge', stream: 'Grade 7A', guardianName: 'Peter Njoroge', guardianPhone: '+254 722 987654', guardianEmail: 'peter.njo@email.com', password: 'student123' },
-      { id: 'S003', name: 'Alice Wambui', stream: 'Grade 7A', guardianName: 'Mary Wambui', guardianPhone: '+254 733 111222', guardianEmail: 'mary.wambui@email.com', password: 'student123' },
-      { id: 'S004', name: 'Brian Omondi', stream: 'Grade 8', guardianName: 'Sarah Omondi', guardianPhone: '+254 701 444555', guardianEmail: 'sarah.omo@email.com', password: 'student123' },
-      { id: 'S005', name: 'Grace Mutua', stream: 'Grade 8', guardianName: 'John Mutua', guardianPhone: '+254 705 666777', guardianEmail: 'john.mutua@email.com', password: 'student123' },
-      { id: 'S006', name: 'Kevin Kiprop', stream: 'Grade 9', guardianName: 'Paul Kiprop', guardianPhone: '+254 720 888999', guardianEmail: 'paul.kip@email.com', password: 'student123' },
-      { id: 'S007', name: 'Mercy Chebet', stream: 'Grade 9', guardianName: 'Jane Chebet', guardianPhone: '+254 715 000111', guardianEmail: 'jane.chebet@email.com', password: 'student123' }
+      { id: 'S001', name: 'David Kamau', stream: 'Grade 7A', parentId: 'P001', password: 'student123' },
+      { id: 'S002', name: 'Joseph Njoroge', stream: 'Grade 7A', parentId: 'P002', password: 'student123' },
+      { id: 'S003', name: 'Alice Wambui', stream: 'Grade 7A', parentId: 'P003', password: 'student123' },
+      { id: 'S004', name: 'Brian Omondi', stream: 'Grade 8', parentId: 'P004', password: 'student123' },
+      { id: 'S005', name: 'Grace Mutua', stream: 'Grade 8', parentId: 'P005', password: 'student123' },
+      { id: 'S006', name: 'Kevin Kiprop', stream: 'Grade 9', parentId: 'P006', password: 'student123' },
+      { id: 'S007', name: 'Mercy Chebet', stream: 'Grade 9', parentId: 'P007', password: 'student123' }
     ];
 
     for (const s of studentsData) {
       const hashedPassword = hashPassword(s.password);
       await sql`
-        INSERT INTO students (id, name, stream, guardian_name, guardian_phone, guardian_email, password)
-        VALUES (${s.id}, ${s.name}, ${s.stream}, ${s.guardianName}, ${s.guardianPhone}, ${s.guardianEmail}, ${hashedPassword})
+        INSERT INTO students (id, name, stream, parent_id, password)
+        VALUES (${s.id}, ${s.name}, ${s.stream}, ${s.parentId}, ${hashedPassword})
       `;
     }
 
-
-    // 3. Seed Study Materials
+    // 6. Seed Study Materials
     const materialsData = [
       {
         id: 'M001',
@@ -121,7 +171,7 @@ A narrative essay tells a story, usually from the writer's perspective. It must 
       `;
     }
 
-    // 4. Seed Timetable Events
+    // 7. Seed Timetable Events
     const timetableData = [
       { id: 'E001', teacherId: 'T003', subject: 'Pre-Tech', stream: 'Grade 9', startTime: 495, endTime: 540, room: 'Room 5 (Workshop)' },
       { id: 'E002', teacherId: 'T001', subject: 'Science', stream: 'Grade 7A', startTime: 600, endTime: 645, room: 'Room 4 (Lab)' },

@@ -143,9 +143,7 @@ function renderTeacherRegistrationForm(): string {
       <div class="form-group">
         <label for="reg-stream">Class Stream Assignment</label>
         <select id="reg-stream" class="form-control" required style="font-family: inherit;">
-          <option value="Grade 7A">Grade 7A</option>
-          <option value="Grade 8">Grade 8</option>
-          <option value="Grade 9">Grade 9</option>
+          ${['Pre-Primary 1', 'Pre-Primary 2', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7A', 'Grade 8', 'Grade 9'].map(g => `<option value="${g}">${g}</option>`).join('')}
         </select>
       </div>
       <div class="form-group">

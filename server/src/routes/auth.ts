@@ -22,19 +22,40 @@ router.post('/login', async (req, res): Promise<void> => {
         };
       }
     } else if (role === 'teacher') {
-      const [teacher] = await sql`SELECT * FROM teachers WHERE LOWER(email) = ${email.trim().toLowerCase()}`;
+      const [teacher] = await sql`
+        SELECT 
+          t.id, 
+          t.name, 
+          t.email, 
+          t.phone, 
+          t.approved,
+          t.password,
+          c.name as stream
+        FROM teachers t
+        LEFT JOIN classes c ON t.id = c.class_teacher_id
+        WHERE LOWER(t.email) = ${email.trim().toLowerCase()}
+      `;
 
       if (teacher && verifyPassword(password, teacher.password)) {
         if (!teacher.approved) {
           res.status(401).json({ error: 'Your account is pending administrator approval.' });
           return;
         }
+
+        // Fetch subjects assigned to this teacher
+        const assignments = await sql`
+          SELECT class_name, subject_name 
+          FROM class_subjects 
+          WHERE teacher_id = ${teacher.id}
+        `;
+
         matchedUser = {
           id: teacher.id,
           name: teacher.name,
           role: 'teacher',
-          stream: teacher.stream,
-          email: teacher.email
+          stream: teacher.stream || '',
+          email: teacher.email,
+          assignments: assignments.map(a => ({ className: a.class_name, subjectName: a.subject_name }))
         };
       }
     } else if (role === 'student') {
@@ -93,8 +114,22 @@ router.post('/register-teacher', async (req, res): Promise<void> => {
     const hashedPassword = hashPassword(password);
     
     await sql`
-      INSERT INTO teachers (id, name, email, phone, subject, stream, password, approved)
-      VALUES (${newId}, ${name}, ${email.trim().toLowerCase()}, ${phone || ''}, ${subject}, ${stream}, ${hashedPassword}, false)
+      INSERT INTO teachers (id, name, email, phone, password, approved)
+      VALUES (${newId}, ${name}, ${email.trim().toLowerCase()}, ${phone || ''}, ${hashedPassword}, false)
+    `;
+
+    // Associate as Class Teacher of their primary stream
+    await sql`
+      INSERT INTO classes (name, class_teacher_id)
+      VALUES (${stream}, ${newId})
+      ON CONFLICT (name) DO UPDATE SET class_teacher_id = ${newId}
+    `;
+
+    // Associate their subject teaching in that stream
+    await sql`
+      INSERT INTO class_subjects (class_name, subject_name, teacher_id)
+      VALUES (${stream}, ${subject}, ${newId})
+      ON CONFLICT (class_name, subject_name) DO UPDATE SET teacher_id = ${newId}
     `;
 
     res.status(201).json({

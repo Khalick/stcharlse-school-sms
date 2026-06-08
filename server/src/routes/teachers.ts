@@ -14,7 +14,20 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response): Prom
   }
 
   try {
-    const teachers = await sql`SELECT id, name, email, phone, subject, stream, approved FROM teachers`;
+    const teachers = await sql`
+      SELECT 
+        t.id, 
+        t.name, 
+        t.email, 
+        t.phone, 
+        t.approved,
+        c.name as stream,
+        COALESCE(string_agg(DISTINCT cs.subject_name, ', '), '') as subject
+      FROM teachers t
+      LEFT JOIN classes c ON t.id = c.class_teacher_id
+      LEFT JOIN class_subjects cs ON t.id = cs.teacher_id
+      GROUP BY t.id, t.name, t.email, t.phone, t.approved, c.name
+    `;
     res.json(teachers);
   } catch (error) {
     res.status(500).json({ error: 'Failed to retrieve teacher directory.' });
@@ -31,45 +44,67 @@ router.get('/:id/students', authenticateToken, async (req: AuthRequest, res: Res
   }
 
   try {
-    // 1. Get teacher stream
-    const [teacher] = await sql`SELECT stream FROM teachers WHERE id = ${id}`;
+    // 1. Get class they are class teacher of
+    const [classTeacherClass] = await sql`SELECT name FROM classes WHERE class_teacher_id = ${id}`;
+    
+    // Determine target stream (default to their class teacher class if none specified)
+    const targetStream = streamParam || classTeacherClass?.name;
 
-    if (!teacher) {
-      res.status(404).json({ error: 'Teacher not found.' });
+    if (!targetStream) {
+      res.status(400).json({ error: 'No stream specified, and you are not assigned as a Class Teacher to any stream.' });
       return;
     }
 
-    // 2. Fetch all students in teacher's stream and compute attendance rate dynamically
-    // Use ::int casts for Postgres aggregation counts
+    // 2. Determine permissions
+    const isClassTeacher = classTeacherClass?.name === targetStream;
+    const [subjectTeaching] = await sql`
+      SELECT id 
+      FROM class_subjects 
+      WHERE teacher_id = ${id} AND class_name = ${targetStream}
+    `;
+
+    const isSubjectTeacher = !!subjectTeaching;
+
+    if (!isClassTeacher && !isSubjectTeacher && req.user?.role !== 'admin') {
+      res.status(403).json({ error: 'Access Denied: You do not teach or manage this stream.' });
+      return;
+    }
+
+    // 3. Fetch students in target stream
     const students = await sql`
       SELECT 
         s.id,
         s.name,
         s.stream,
-        s.guardian_name,
-        s.guardian_phone,
-        s.guardian_email,
+        p.name as guardian_name,
+        p.phone as guardian_phone,
+        p.email as guardian_email,
         COUNT(reg.id)::int as total_sessions,
         SUM(CASE WHEN r.status = 'present' THEN 1 ELSE 0 END)::int as present_sessions
       FROM students s
+      JOIN parents p ON s.parent_id = p.id
       LEFT JOIN attendance_records r ON s.id = r.student_id
       LEFT JOIN attendance_registers reg ON r.register_id = reg.id AND reg.session = 'morning'
-      WHERE s.stream = ${teacher.stream}
-      GROUP BY s.id, s.name, s.stream, s.guardian_name, s.guardian_phone, s.guardian_email
+      WHERE s.stream = ${targetStream}
+      GROUP BY s.id, s.name, s.stream, p.name, p.phone, p.email
     `;
 
-    // 3. Inject original baseline history (20 days, 19 present) so initial load matches mock rates
+    // 4. Map dynamic rates, mask guardian details if not class teacher or admin
     const formattedStudents = students.map(s => {
       const totalSessions = (s.total_sessions || 0) + 20;
       const presentSessions = (s.present_sessions || 0) + 19;
+      
+      const showSensitive = isClassTeacher || req.user?.role === 'admin';
+
       return {
         id: s.id,
         name: s.name,
         stream: s.stream,
         guardianName: s.guardian_name,
-        guardianPhone: s.guardian_phone,
-        guardianEmail: s.guardian_email,
-        attendanceRate: Math.round((presentSessions / totalSessions) * 100)
+        guardianPhone: showSensitive ? s.guardian_phone : 'Masked (Class Teacher Only)',
+        guardianEmail: showSensitive ? s.guardian_email : 'Masked (Class Teacher Only)',
+        attendanceRate: Math.round((presentSessions / totalSessions) * 100),
+        isReadOnly: !showSensitive
       };
     });
 
@@ -102,10 +137,23 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response): Pro
 
     const hashedPassword = hashPassword('teacher123');
     await sql`
-      INSERT INTO teachers (id, name, email, phone, subject, stream, password, approved)
-      VALUES (${newId}, ${name}, ${email.trim().toLowerCase()}, ${phone || ''}, ${subject}, ${stream}, ${hashedPassword}, true)
+      INSERT INTO teachers (id, name, email, phone, password, approved)
+      VALUES (${newId}, ${name}, ${email.trim().toLowerCase()}, ${phone || ''}, ${hashedPassword}, true)
     `;
 
+    // Assign Class Teacher stream (1-to-1)
+    await sql`
+      INSERT INTO classes (name, class_teacher_id)
+      VALUES (${stream}, ${newId})
+      ON CONFLICT (name) DO UPDATE SET class_teacher_id = ${newId}
+    `;
+
+    // Assign Class Subject
+    await sql`
+      INSERT INTO class_subjects (class_name, subject_name, teacher_id)
+      VALUES (${stream}, ${subject}, ${newId})
+      ON CONFLICT (class_name, subject_name) DO UPDATE SET teacher_id = ${newId}
+    `;
 
     res.status(201).json({
       success: true,
@@ -144,8 +192,25 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response): P
     }
 
     await sql`
-      UPDATE teachers SET name = ${name}, email = ${email.trim().toLowerCase()}, phone = ${phone || ''}, subject = ${subject}, stream = ${stream}
+      UPDATE teachers 
+      SET name = ${name}, email = ${email.trim().toLowerCase()}, phone = ${phone || ''}
       WHERE id = ${id}
+    `;
+
+    // Clear previous Class Teacher assignments for this teacher and insert new one
+    await sql`UPDATE classes SET class_teacher_id = NULL WHERE class_teacher_id = ${id}`;
+    await sql`
+      INSERT INTO classes (name, class_teacher_id)
+      VALUES (${stream}, ${id})
+      ON CONFLICT (name) DO UPDATE SET class_teacher_id = ${id}
+    `;
+
+    // Clear previous subject assignments for this class/teacher and insert new one
+    await sql`DELETE FROM class_subjects WHERE teacher_id = ${id} AND class_name = ${stream}`;
+    await sql`
+      INSERT INTO class_subjects (class_name, subject_name, teacher_id)
+      VALUES (${stream}, ${subject}, ${id})
+      ON CONFLICT (class_name, subject_name) DO UPDATE SET teacher_id = ${id}
     `;
 
     res.json({ success: true, teacher: { id, name, email: email.trim().toLowerCase(), phone: phone || '', subject, stream } });

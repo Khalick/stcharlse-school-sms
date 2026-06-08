@@ -68,13 +68,16 @@ router.get('/registers-summary', async (req: AuthRequest, res: Response) => {
       SELECT 
         t.id as teacher_id,
         t.name as teacher_name,
-        t.stream as assigned_stream,
-        t.subject as teacher_subject,
+        c.name as assigned_stream,
+        COALESCE(string_agg(DISTINCT cs.subject_name, ', '), '') as teacher_subject,
         m_reg.submitted_at as morning_submitted,
         e_reg.submitted_at as evening_submitted
       FROM teachers t
+      LEFT JOIN classes c ON t.id = c.class_teacher_id
+      LEFT JOIN class_subjects cs ON t.id = cs.teacher_id AND cs.class_name = c.name
       LEFT JOIN attendance_registers m_reg ON t.id = m_reg.teacher_id AND m_reg.date = ${todayStr} AND m_reg.session = 'morning'
       LEFT JOIN attendance_registers e_reg ON t.id = e_reg.teacher_id AND e_reg.date = ${todayStr} AND e_reg.session = 'evening'
+      GROUP BY t.id, t.name, c.name, m_reg.submitted_at, e_reg.submitted_at
     `;
 
     const formatted = summary.map(row => ({
@@ -110,7 +113,7 @@ router.get('/timetable', async (req: AuthRequest, res: Response) => {
 
 // POST /api/admin/broadcast - Log high fidelity multi-channel parental announcement
 router.post('/broadcast', async (req: AuthRequest, res: Response): Promise<void> => {
-  const { message, timestamp } = req.body;
+  const { message, timestamp, targetType, targetValue } = req.body;
 
   if (!message || !timestamp) {
     res.status(400).json({ error: 'Missing broadcast message body or virtual timestamp.' });
@@ -118,6 +121,48 @@ router.post('/broadcast', async (req: AuthRequest, res: Response): Promise<void>
   }
 
   try {
+    let queryStudents: any[] = [];
+    let recipientLabel = 'All Parents';
+
+    if (targetType === 'grade' && targetValue) {
+      queryStudents = await sql`
+        SELECT s.name, p.name as guardian_name, p.phone as guardian_phone, p.email as guardian_email 
+        FROM students s
+        JOIN parents p ON s.parent_id = p.id
+        WHERE s.stream = ${targetValue}
+      `;
+      recipientLabel = `Parents of ${targetValue}`;
+    } else if (targetType === 'student' && targetValue) {
+      queryStudents = await sql`
+        SELECT s.name, p.name as guardian_name, p.phone as guardian_phone, p.email as guardian_email 
+        FROM students s
+        JOIN parents p ON s.parent_id = p.id
+        WHERE s.id = ${targetValue}
+      `;
+      if (queryStudents.length > 0) {
+        recipientLabel = `Parent of ${queryStudents[0].name} (${queryStudents[0].guardian_name})`;
+      } else {
+        recipientLabel = `Parent of Student ID ${targetValue}`;
+      }
+    } else {
+      // Default: all
+      queryStudents = await sql`
+        SELECT s.name, p.name as guardian_name, p.phone as guardian_phone, p.email as guardian_email 
+        FROM students s
+        JOIN parents p ON s.parent_id = p.id
+      `;
+      recipientLabel = 'All School Parents';
+    }
+
+    // Extract contacts
+    const phoneNumbers = queryStudents.map(s => s.guardian_phone).filter(Boolean);
+    const emails = queryStudents.map(s => s.guardian_email).filter(Boolean);
+    const names = queryStudents.map(s => `${s.guardian_name} (Parent of ${s.name})`);
+
+    const formattedPhones = phoneNumbers.length > 0 ? phoneNumbers : ['+254 712 345678'];
+    const formattedEmails = emails.length > 0 ? emails : ['parent@stcharles.sc.ke'];
+    const formattedNames = names.length > 0 ? names : ['Default Guardian'];
+
     const logId = `LOG_${Date.now()}`;
     await sql`
       INSERT INTO comm_logs (
@@ -130,11 +175,11 @@ router.post('/broadcast', async (req: AuthRequest, res: Response): Promise<void>
         ${timestamp},
         ${message},
         'read',
-        ${`POST /v19.0/messages HTTP/1.1 -> Host: graph.facebook.com -> Content-Type: application/json -> payload: template_name: "school_notice_v1", variables: ["${message}"] -> Response: HTTP 200 OK (id: wamid.HBgLMjU0NzEyMzQ1Njc4FQIAERg)`},
+        ${`POST /v19.0/messages HTTP/1.1 -> Host: graph.facebook.com -> Content-Type: application/json -> payload: template_name: "school_notice_v1", variables: ["${message}"], recipients: ${JSON.stringify(formattedPhones)} -> Response: HTTP 200 OK (id: wamid.HBgLMjU0NzEyMzQ1Njc4FQIAERg)`},
         'sent',
-        ${`POST /messaging HTTP/1.1 -> Host: api.africastalking.com -> payload: to: ["+254712345678", "+254722987654"...], from: "STCHARLES" -> Response: Carrier Status=Success, Sent to Safaricom SMSC Network`},
+        ${`POST /messaging HTTP/1.1 -> Host: api.africastalking.com -> payload: to: ${JSON.stringify(formattedPhones)}, from: "STCHARLES" -> Response: Carrier Status=Success, Sent to Safaricom SMSC Network (Target: ${recipientLabel})`},
         'delivered',
-        ${`SMTP Connect -> Host: mail.sendgrid.net -> AUTH SUCCESS -> MAIL FROM: info@stcharles.sc.ke -> RCPT TO: james.kamau@email.com, peter.njo@email.com... -> DATA ACCEPTED (Queue ID: sg.250-ok)`}
+        ${`SMTP Connect -> Host: mail.sendgrid.net -> AUTH SUCCESS -> MAIL FROM: info@stcharles.sc.ke -> RCPT TO: ${formattedEmails.join(', ')} (Target Names: ${formattedNames.join(', ')}) -> DATA ACCEPTED (Queue ID: sg.250-ok)`}
       )
     `;
 
@@ -143,6 +188,7 @@ router.post('/broadcast', async (req: AuthRequest, res: Response): Promise<void>
     res.status(500).json({ error: 'Broadcaster dispatch error: ' + error.message });
   }
 });
+
 
 // POST /api/admin/timetable - Create a new timetable event
 router.post('/timetable', async (req: AuthRequest, res: Response): Promise<void> => {
@@ -231,16 +277,17 @@ router.get('/attendance-history', async (req: AuthRequest, res: Response): Promi
         reg.date,
         reg.session,
         t.name as teacher_name,
-        t.stream,
+        c.name as stream,
         COUNT(r.id)::int as total_students,
         SUM(CASE WHEN r.status = 'present' THEN 1 ELSE 0 END)::int as present_count,
         SUM(CASE WHEN r.status = 'absent' THEN 1 ELSE 0 END)::int as absent_count,
         reg.submitted_at
       FROM attendance_registers reg
       JOIN teachers t ON reg.teacher_id = t.id
+      LEFT JOIN classes c ON t.id = c.class_teacher_id
       LEFT JOIN attendance_records r ON r.register_id = reg.id
       WHERE reg.date >= ${fromDate} AND reg.date <= ${toDate}
-      GROUP BY reg.id, reg.date, reg.session, t.name, t.stream, reg.submitted_at
+      GROUP BY reg.id, reg.date, reg.session, t.name, c.name, reg.submitted_at
       ORDER BY reg.date DESC, reg.session ASC
     `;
 
@@ -248,6 +295,36 @@ router.get('/attendance-history', async (req: AuthRequest, res: Response): Promi
   } catch (error: any) {
     console.error('Error fetching attendance history:', error);
     res.status(500).json({ error: 'Failed to query attendance history: ' + error.message });
+  }
+});
+
+// POST /api/admin/parents/orphan-resolve - Handle choice to delete or retain orphaned parent records
+router.post('/parents/orphan-resolve', async (req: AuthRequest, res: Response): Promise<void> => {
+  const { parentId, action, logId } = req.body;
+
+  if (!parentId || !action || !logId) {
+    res.status(400).json({ error: 'Missing parent ID, resolution action, or log reference ID.' });
+    return;
+  }
+
+  try {
+    if (action === 'delete') {
+      // Check if students are still linked to this parent (just in case)
+      const [studentCount] = await sql`SELECT COUNT(*)::int as count FROM students WHERE parent_id = ${parentId}`;
+      if (studentCount && studentCount.count > 0) {
+        res.status(400).json({ error: 'Cannot delete parent: students are still associated with this parent.' });
+        return;
+      }
+      await sql`DELETE FROM parents WHERE id = ${parentId}`;
+    }
+    
+    // Always remove the orphan alert message
+    await sql`DELETE FROM comm_logs WHERE id = ${logId}`;
+
+    res.json({ success: true, message: `Orphaned parent ${parentId} has been ${action === 'delete' ? 'deleted' : 'retained'} and alert dismissed.` });
+  } catch (error: any) {
+    console.error('Error resolving orphaned parent:', error);
+    res.status(500).json({ error: 'Failed to resolve orphaned parent selection: ' + error.message });
   }
 });
 
