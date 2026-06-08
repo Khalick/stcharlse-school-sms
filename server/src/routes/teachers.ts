@@ -37,6 +37,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response): Prom
 // GET /api/teachers/:id/students - List students in teacher's assigned stream (with dynamically computed attendance rates)
 router.get('/:id/students', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
+  const streamParam = req.query.stream as string;
 
   if (req.user?.role !== 'admin' && !(req.user?.role === 'teacher' && req.user?.id === id)) {
     res.status(403).json({ error: 'Access Denied: You are not authorized to access this workspace.' });

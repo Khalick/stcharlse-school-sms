@@ -11,7 +11,7 @@ router.post('/login', async (req, res): Promise<void> => {
   const { role, username, email, studentId, password } = req.body;
 
   try {
-    let matchedUser: { id: string; name: string; role: 'admin' | 'teacher' | 'student'; stream?: string; email?: string } | null = null;
+    let matchedUser: { id: string; name: string; role: 'admin' | 'teacher' | 'student'; stream?: string; email?: string; assignments?: { className: string, subjectName: string }[] } | null = null;
 
     if (role === 'admin') {
       if (username === 'charlie@61' && password === 'admin@61') {

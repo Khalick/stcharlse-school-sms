@@ -170,7 +170,7 @@ Return ONLY a valid JSON object. Do not include markdown codeblocks or conversat
     const parsedEvents = parsedData.events || [];
 
     // Match parsed teacher names to existing PostgreSQL teachers
-    const teachers = await sql`SELECT id, name, subject, stream FROM teachers`;
+    const teachers = await sql`SELECT id, name FROM teachers`;
 
     const enrichedEvents = parsedEvents.map((ev: any) => {
       let matchedTeacherId: string | null = null;
