@@ -43,8 +43,10 @@ app.use(cors());
 app.use(express.json());
 
 // Initialize Database Tables
-console.log('Bootstrapping St. Charles database schema...');
-initDb();
+if (!process.env.VERCEL) {
+  console.log('Bootstrapping St. Charles database schema...');
+  initDb().catch(err => console.error('DB Init Error:', err));
+}
 
 // Mount API Endpoints
 app.use('/api/auth', authRouter);
