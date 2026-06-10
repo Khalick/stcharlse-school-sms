@@ -46,7 +46,7 @@ export async function renderDashboardTab(container: HTMLElement): Promise<void> 
             <select id="broadcast-target-type" class="form-control" style="font-family: inherit;">
               <option value="all">All Grades (PP1 to Grade 9)</option>
               <option value="grade">Specific Grade Level</option>
-              <option value="student">Specific Student's Parent</option>
+              <option value="students">Select Specific Parents</option>
             </select>
           </div>
           
@@ -58,11 +58,27 @@ export async function renderDashboardTab(container: HTMLElement): Promise<void> 
           </div>
 
           <div class="form-group" id="group-student-select" style="display:none;">
-            <label for="broadcast-student-select">Select Student (Parent/Guardian)</label>
-            <select id="broadcast-student-select" class="form-control" style="font-family: inherit;">
-              ${allStudents.map(s => `<option value="${s.id}">${s.name} (${s.stream}) — Parent: ${s.guardianName}</option>`).join('')}
-              ${allStudents.length === 0 ? '<option value="">No students available</option>' : ''}
-            </select>
+            <div style="display:flex; gap:8px; margin-bottom:8px;">
+              <select id="filter-student-grade" class="form-control" style="font-family: inherit; flex:1;">
+                <option value="All">All Grades (Filter)</option>
+                ${['Pre-Primary 1', 'Pre-Primary 2', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7A', 'Grade 8', 'Grade 9'].map(g => `<option value="${g}">${g}</option>`).join('')}
+              </select>
+              <input type="text" id="filter-student-search" class="form-control" placeholder="Search student or parent..." style="flex:1;">
+            </div>
+            <div style="display:flex; gap:8px; margin-bottom:8px;">
+              <button type="button" class="btn-secondary" id="btn-select-all-students" style="font-size:0.75rem; padding:4px 10px;">Select All</button>
+              <button type="button" class="btn-secondary" id="btn-deselect-all-students" style="font-size:0.75rem; padding:4px 10px;">Deselect All</button>
+              <span id="selected-count-label" style="font-size:0.8rem; color:var(--text-light); display:flex; align-items:center; margin-left:auto;">0 selected</span>
+            </div>
+            <div id="student-checkbox-list" style="max-height:200px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; padding:8px;">
+              ${allStudents.map(s => `
+                <label style="display:flex; align-items:center; gap:8px; padding:5px 4px; cursor:pointer; border-bottom:1px solid var(--border); font-size:0.85rem;" data-stream="${s.stream}" data-name="${s.name.toLowerCase()}" data-id="${s.id.toLowerCase()}" data-guardian="${(s.guardianName || '').toLowerCase()}">
+                  <input type="checkbox" class="student-check" value="${s.id}" style="width:16px; height:16px; accent-color:var(--primary);">
+                  <span><strong>${s.name}</strong> (${s.stream}) — Parent: ${s.guardianName}</span>
+                </label>
+              `).join('')}
+              ${allStudents.length === 0 ? '<p style="text-align:center; color:var(--text-light); padding:12px; font-size:0.85rem;">No students registered yet.</p>' : ''}
+            </div>
           </div>
 
           <div class="form-group"><label for="broadcast-message">Announcement Message</label>
@@ -88,13 +104,61 @@ export async function renderDashboardTab(container: HTMLElement): Promise<void> 
     if (val === 'grade') {
       gradeSelectGroup.style.display = 'block';
       studentSelectGroup.style.display = 'none';
-    } else if (val === 'student') {
+    } else if (val === 'students') {
       gradeSelectGroup.style.display = 'none';
       studentSelectGroup.style.display = 'block';
     } else {
       gradeSelectGroup.style.display = 'none';
       studentSelectGroup.style.display = 'none';
     }
+  });
+
+  // Dynamic Filtering for checkbox list
+  const filterGradeSelect = container.querySelector('#filter-student-grade') as HTMLSelectElement;
+  const filterSearchInput = container.querySelector('#filter-student-search') as HTMLInputElement;
+  const checkboxLabels = container.querySelectorAll('#student-checkbox-list label') as NodeListOf<HTMLElement>;
+
+  const filterCheckboxList = () => {
+    const selectedGrade = filterGradeSelect?.value || 'All';
+    const searchQuery = (filterSearchInput?.value || '').toLowerCase().trim();
+
+    checkboxLabels.forEach(label => {
+      const stream = label.dataset.stream || '';
+      const name = label.dataset.name || '';
+      const id = label.dataset.id || '';
+      const guardian = label.dataset.guardian || '';
+      const matchGrade = selectedGrade === 'All' || stream === selectedGrade;
+      const matchSearch = !searchQuery || name.includes(searchQuery) || id.includes(searchQuery) || guardian.includes(searchQuery);
+      label.style.display = (matchGrade && matchSearch) ? 'flex' : 'none';
+    });
+  };
+
+  filterGradeSelect?.addEventListener('change', filterCheckboxList);
+  filterSearchInput?.addEventListener('input', filterCheckboxList);
+
+  // Update selected count label
+  const countLabel = container.querySelector('#selected-count-label') as HTMLElement;
+  const allCheckboxes = container.querySelectorAll('.student-check') as NodeListOf<HTMLInputElement>;
+
+  const updateSelectedCount = () => {
+    const count = Array.from(allCheckboxes).filter(c => c.checked).length;
+    if (countLabel) countLabel.textContent = `${count} selected`;
+  };
+  allCheckboxes.forEach(cb => cb.addEventListener('change', updateSelectedCount));
+
+  // Select All / Deselect All (only visible ones)
+  container.querySelector('#btn-select-all-students')?.addEventListener('click', () => {
+    checkboxLabels.forEach(label => {
+      if (label.style.display !== 'none') {
+        const cb = label.querySelector('.student-check') as HTMLInputElement;
+        if (cb) cb.checked = true;
+      }
+    });
+    updateSelectedCount();
+  });
+  container.querySelector('#btn-deselect-all-students')?.addEventListener('click', () => {
+    allCheckboxes.forEach(cb => cb.checked = false);
+    updateSelectedCount();
   });
 
   // Broadcast handler
@@ -108,13 +172,14 @@ export async function renderDashboardTab(container: HTMLElement): Promise<void> 
 
     const targetType = targetTypeSelect.value;
     let targetValue = 'all';
+    let targetStudentIds: string[] = [];
 
     if (targetType === 'grade') {
       targetValue = (container.querySelector('#broadcast-grade-select') as HTMLSelectElement).value;
-    } else if (targetType === 'student') {
-      targetValue = (container.querySelector('#broadcast-student-select') as HTMLSelectElement).value;
-      if (!targetValue) {
-        triggerToastNotification('Error', 'Please select a student parent recipient', 'danger');
+    } else if (targetType === 'students') {
+      targetStudentIds = Array.from(allCheckboxes).filter(c => c.checked).map(c => c.value);
+      if (targetStudentIds.length === 0) {
+        triggerToastNotification('Error', 'Please select at least one student to message their parent(s).', 'danger');
         return;
       }
     }
@@ -124,10 +189,11 @@ export async function renderDashboardTab(container: HTMLElement): Promise<void> 
         message: msg, 
         timestamp: ts,
         targetType,
-        targetValue
+        targetValue,
+        targetStudentIds
       });
       playWarningChime();
-      triggerToastNotification('Broadcast Success', 'Announcement delivered to selected parents via WhatsApp, SMS, and Email.');
+      triggerToastNotification('Broadcast Success', 'Announcement delivered to selected parents via SMS and Email.');
       ta.value = '';
       renderDashboardTab(container);
     } catch (err: any) { triggerToastNotification('Broadcast Failed', err.message, 'danger'); }

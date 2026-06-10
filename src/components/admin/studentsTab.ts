@@ -96,6 +96,7 @@ function showStudentModal(container: HTMLElement, student: any | null, streamFil
   mc.innerHTML = `<div class="modal-overlay"><div class="modal-content">
     <div class="modal-header"><h3>${isEdit ? 'Edit Student' : 'Register New Student'}</h3><button class="modal-close-btn" id="close-stu-modal">×</button></div>
     <form id="stu-form"><div class="modal-body">
+      <div class="form-group"><label>Admission Number (ID)</label><input type="text" id="sf-id" class="form-control" value="${student?.id || ''}" placeholder="e.g. S001" required ${isEdit ? 'disabled' : ''}></div>
       <div class="form-group"><label>Student Name</label><input type="text" id="sf-name" class="form-control" value="${student?.name || ''}" required></div>
       <div class="form-group"><label>Class Stream</label><select id="sf-stream" class="form-control" required ${isTeacher ? 'disabled' : ''}>
         ${['Pre-Primary 1', 'Pre-Primary 2', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7A', 'Grade 8', 'Grade 9'].map(g => `<option value="${g}" ${student?.stream === g ? 'selected' : (defaultStream === g ? 'selected' : '')}>${g}</option>`).join('')}
@@ -114,6 +115,7 @@ function showStudentModal(container: HTMLElement, student: any | null, streamFil
   mc.querySelector('#stu-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const body = {
+      id: (mc.querySelector('#sf-id') as HTMLInputElement).value.trim(),
       name: (mc.querySelector('#sf-name') as HTMLInputElement).value.trim(),
       stream: isTeacher ? defaultStream : (mc.querySelector('#sf-stream') as HTMLSelectElement).value,
       guardianName: (mc.querySelector('#sf-gname') as HTMLInputElement).value.trim(),

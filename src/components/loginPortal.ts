@@ -104,15 +104,7 @@ function renderLoginForm(): string {
       </div>
     ` : ''}
 
-    <!-- Help guidelines for tester -->
-    <div class="login-demo-helper">
-      <strong>Quick-Access Demo Credentials:</strong>
-      <ul>
-        ${activeLoginTab === 'student' ? '<li>Student Username (Name or ID): <code>David</code> or <code>S001</code> | Password: <code>S001</code></li>' : ''}
-        ${activeLoginTab === 'teacher' ? '<li>Teacher Email: <code>agnes.w@stcharles.sc.ke</code> | Password: <code>teacher123</code></li>' : ''}
-        ${activeLoginTab === 'admin' ? '<li>Admin Username: <code>charlie@61</code> | Password: <code>admin@61</code></li>' : ''}
-      </ul>
-    </div>
+
   `;
 }
 
@@ -166,8 +158,8 @@ function renderLoginFormFields(): string {
   if (activeLoginTab === 'student') {
     return `
       <div class="form-group">
-        <label for="login-student-id">Student First Name or ID</label>
-        <input type="text" id="login-student-id" class="form-control" placeholder="e.g. David or S001" required autocomplete="username">
+        <label for="login-student-id">Student Username (First Name or Admission Number)</label>
+        <input type="text" id="login-student-id" class="form-control" placeholder="e.g. David" required autocomplete="username">
       </div>
       <div class="form-group">
         <label for="login-password">Password (Admission Number)</label>
@@ -189,7 +181,7 @@ function renderLoginFormFields(): string {
     return `
       <div class="form-group">
         <label for="login-admin-user">Administrator Username</label>
-        <input type="text" id="login-admin-user" class="form-control" placeholder="e.g. charlie@61" required autocomplete="username">
+        <input type="text" id="login-admin-user" class="form-control" placeholder="Enter admin username" required autocomplete="username">
       </div>
       <div class="form-group">
         <label for="login-password">Security Password</label>

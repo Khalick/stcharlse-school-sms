@@ -97,10 +97,10 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response): Pro
     return;
   }
 
-  const { name, stream, guardianName, guardianPhone, guardianEmail } = req.body;
+  const { id, name, stream, guardianName, guardianPhone, guardianEmail } = req.body;
 
-  if (!name || !stream || !guardianName || !guardianPhone || !guardianEmail) {
-    res.status(400).json({ error: 'Missing required student admission profile fields.' });
+  if (!id || !name || !stream || !guardianName || !guardianPhone || !guardianEmail) {
+    res.status(400).json({ error: 'Missing required student admission profile fields (including Admission Number).' });
     return;
   }
 
@@ -128,16 +128,20 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response): Pro
       `;
     }
 
-    // 2. Generate next student ID reference Sxxx
-    const [countResult] = await sql`SELECT COUNT(*)::int as count FROM students`;
-    const count = countResult ? countResult.count : 0;
-    const nextIdNum = count + 1;
-    const newId = `S${nextIdNum < 100 ? (nextIdNum < 10 ? '00' + nextIdNum : '0' + nextIdNum) : nextIdNum}`;
+    // 2. Use the provided Admission Number
+    const newId = id.trim().toUpperCase();
+
+    // Check if ID already exists
+    const [existingStudent] = await sql`SELECT id FROM students WHERE id = ${newId}`;
+    if (existingStudent) {
+      res.status(409).json({ error: `A student with admission number ${newId} already exists.` });
+      return;
+    }
 
     const hashedPassword = hashPassword(newId);
     await sql`
       INSERT INTO students (id, name, stream, parent_id, password)
-      VALUES (${newId}, ${name}, ${stream}, ${parentId}, ${hashedPassword})
+      VALUES (${newId}, ${name.trim()}, ${stream}, ${parentId}, ${hashedPassword})
     `;
 
     res.status(201).json({

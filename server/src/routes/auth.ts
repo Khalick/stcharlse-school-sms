@@ -62,9 +62,9 @@ router.post('/login', async (req, res): Promise<void> => {
       // Find student by matching their ID (admission number) or First Name (first word of name)
       const studentsList = await sql`SELECT * FROM students`;
       const student = studentsList.find(s => {
-        const firstName = s.name.trim().split(/\s+/)[0].toLowerCase();
+        const nameParts = s.name.trim().toLowerCase().split(/\s+/);
         const idMatch = s.id.toLowerCase() === studentId.trim().toLowerCase();
-        const nameMatch = firstName === studentId.trim().toLowerCase();
+        const nameMatch = nameParts.includes(studentId.trim().toLowerCase());
         return idMatch || nameMatch;
       });
 

@@ -1,7 +1,10 @@
 import { Router, type Response } from 'express';
+import multer from 'multer';
+import fs from 'fs';
 import { sql } from '../db.js';
 import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
 
+const upload = multer({ dest: 'uploads/' });
 const router = Router();
 
 // POST /api/ai/chat - Charlie AI student companion query endpoint
@@ -52,7 +55,14 @@ router.post('/chat', authenticateToken, async (req: AuthRequest, res: Response):
 You are helping the student "${student.name}" (Grade: ${student.stream}) study the notes titled "${materialTitle}" (Subject: ${materialSubject}).
 Your task is to answer the student's question accurately and helpfully using the study notes context below.
 Be supportive, speak directly to the student in an encouraging and educational manner, and keep your explanations clear, concise, and appropriate for grade-school pupils.
-If the student asks a general question or greeting unrelated to the text, greet them warmly and guide them back to learning.
+
+VISUAL LEARNING INTEGRATION (CRITICAL REQUIREMENT):
+If the student asks about a physical object, organ (e.g. digestive tract, liver, stomach), process, tool, or scene, YOU MUST START YOUR RESPONSE with an educational markdown image!
+Use the free Pollinations AI engine. Replace spaces with hyphens in the URL.
+Format EXACTLY like this: \`![Alt Text](https://image.pollinations.ai/prompt/detailed-kid-friendly-educational-diagram-of-a-[topic]?width=800&height=400&nologo=true)\`
+Example: \`![Diagram of the Digestive System](https://image.pollinations.ai/prompt/highly-detailed-educational-diagram-of-the-human-digestive-system-organs-with-labels-kid-friendly-science?width=800&height=400&nologo=true)\`
+
+DO NOT FORGET THE IMAGE MARKDOWN IF THE TOPIC IS VISUAL. Place the image at the very beginning of your response, then provide your text explanation below it.
 
 STUDY HANDOUT NOTES:
 ---------------------
@@ -201,6 +211,55 @@ Return ONLY a valid JSON object. Do not include markdown codeblocks or conversat
   } catch (error: any) {
     console.error('Groq Timetable Parsing Error:', error);
     res.status(500).json({ error: 'Llama 3 parser failed: ' + error.message });
+  }
+});
+
+// POST /api/ai/transcribe - Transcribe audio using Groq Whisper API
+router.post('/transcribe', authenticateToken, upload.single('audio'), async (req: AuthRequest, res: Response): Promise<void> => {
+  if (!req.file) {
+    res.status(400).json({ error: 'No audio file uploaded.' });
+    return;
+  }
+
+  try {
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) {
+      res.status(500).json({ error: 'Groq API key not configured on server.' });
+      return;
+    }
+
+    const fileData = fs.readFileSync(req.file.path);
+    const blob = new Blob([fileData], { type: req.file.mimetype || 'audio/webm' });
+    
+    const formData = new FormData();
+    formData.append('file', blob, 'audio.webm');
+    formData.append('model', 'whisper-large-v3-turbo');
+    formData.append('response_format', 'json');
+
+    const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: formData
+    });
+
+    // Clean up temporary file
+    fs.unlinkSync(req.file.path);
+
+    if (!response.ok) {
+      const errBody = await response.json().catch(() => ({}));
+      throw new Error(`Groq Whisper API error: ${response.status} - ${JSON.stringify(errBody)}`);
+    }
+
+    const json = await response.json() as any;
+    res.json({ text: json.text });
+  } catch (error: any) {
+    console.error('Groq Whisper Transcription Error:', error);
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    res.status(500).json({ error: 'Transcription failed: ' + error.message });
   }
 });
 

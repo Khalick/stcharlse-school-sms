@@ -149,15 +149,15 @@ export async function generateAiResponse(
 
         if (material.id === 'M001') {
           if (q.includes('liver') || q.includes('bile')) {
-            response = `Great question, ${student.name}! The **liver** is like a filtration factory in your body. It cleans out toxins from your blood so you stay healthy. It also produces a special liquid called **bile** (stored in the gallbladder) which helps break down fats from food so enzymes can digest them easily.`;
+            response = `![Diagram of the Liver](https://image.pollinations.ai/prompt/highly-detailed-educational-diagram-of-the-human-liver-kid-friendly-science?width=800&height=400&nologo=true)\n\nGreat question, ${student.name}! The **liver** is like a filtration factory in your body. It cleans out toxins from your blood so you stay healthy. It also produces a special liquid called **bile** (stored in the gallbladder) which helps break down fats from food so enzymes can digest them easily.`;
           } else if (q.includes('stomach') || q.includes('chyme')) {
-            response = `Aha! The **stomach** is a powerful muscular sac. It uses hydrochloric acid and pepsin enzymes to digest food. It churns everything together into a semi-liquid mixture called **chyme** before squeezing it into the small intestine.`;
+            response = `![Diagram of the Stomach](https://image.pollinations.ai/prompt/highly-detailed-educational-diagram-of-the-human-stomach-kid-friendly-science?width=800&height=400&nologo=true)\n\nAha! The **stomach** is a powerful muscular sac. It uses hydrochloric acid and pepsin enzymes to digest food. It churns everything together into a semi-liquid mixture called **chyme** before squeezing it into the small intestine.`;
           } else if (q.includes('mouth') || q.includes('esophagus') || q.includes('start') || q.includes('begin')) {
             response = `Digestion starts the moment you take a bite, ${student.name}! In your **mouth**, teeth chew food and saliva breaks down starch. When you swallow, the food bolus travels down the **esophagus** through wave-like muscular contractions called *peristalsis*.`;
           } else if (q.includes('intestine')) {
             response = `The intestines are very important! The **small intestine** does most of the heavy lifting for digesting food and absorbing nutrients into your bloodstream. The **large intestine** absorbs water and salts, turning whatever is left into solid waste.`;
           } else {
-            response = `Interesting question, ${student.name}! Based on our Science notes, the digestive system breaks down food so your body can absorb energy. In these notes, we see the mouth, esophagus, stomach, liver, and intestines working together. Is there a specific organ you would like me to explain further?`;
+            response = `![Diagram of the Digestive System](https://image.pollinations.ai/prompt/highly-detailed-educational-diagram-of-the-human-digestive-system-organs-with-labels-kid-friendly-science?width=800&height=400&nologo=true)\n\nInteresting question, ${student.name}! Based on our Science notes, the digestive system breaks down food so your body can absorb energy. In these notes, we see the mouth, esophagus, stomach, liver, and intestines working together. Is there a specific organ you would like me to explain further?`;
           }
         } else if (material.id === 'M002') {
           if (q.includes('safety') || q.includes('rule')) {

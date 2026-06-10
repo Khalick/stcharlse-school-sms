@@ -11,7 +11,8 @@ let activeMaterialId = 'M001';
 let chatHistory: Record<string, { sender: 'user' | 'assistant'; text: string }[]> = {};
 let isTtsActive = false;
 let isRecording = false;
-let recognition: any = null;
+let mediaRecorder: MediaRecorder | null = null;
+let audioChunks: Blob[] = [];
 
 // Quiz State
 let quizQuestions: QuizQuestion[] = [];
@@ -214,6 +215,7 @@ function renderParsedMarkdown(content: string): string {
     .replace(/#### (.*?)\n/g, '<h4 style="color:var(--primary-light); font-size:0.95rem; margin-top:12px; margin-bottom:6px;">$1</h4>')
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/!\[([^\]]+)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%; border-radius:8px; margin-top:8px; margin-bottom:8px; display:block;">')
     .replace(/- (.*?)\n/g, '<li style="margin-left: 12px; font-size: 0.9rem; list-style-type:square;">$1</li>');
     
   return html.split('\n\n').map(p => p.trim().startsWith('<h') || p.trim().startsWith('<li') ? p : `<p style="margin-bottom:12px; font-size:0.9rem;">${p}</p>`).join('');
@@ -435,59 +437,75 @@ function bindStudentEvents(container: HTMLElement, allStudents: any[], studentMa
   });
 }
 
-function startDictation(inputEl: HTMLInputElement, container: HTMLElement): void {
-  const Speech = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-  if (!Speech) {
-    triggerToastNotification('Dictation Error', 'Speech recognition is not supported in this browser.', 'danger');
-    return;
-  }
-
+async function startDictation(inputEl: HTMLInputElement, container: HTMLElement): Promise<void> {
   try {
-    recognition = new Speech();
-    recognition.continuous = false;
-    recognition.lang = 'en-KE';
-    recognition.interimResults = false;
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    audioChunks = [];
 
-    recognition.onstart = () => {
-      isRecording = true;
-      triggerHapticVibration([50]);
-      renderStudentPortal(container);
-    };
-
-    recognition.onresult = (event: any) => {
-      const text = event.results[0][0].transcript;
-      if (inputEl) {
-        inputEl.value = text;
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        audioChunks.push(event.data);
       }
-      stopDictation();
-      setTimeout(() => {
-        container.querySelector('#btn-chat-send')?.dispatchEvent(new Event('click'));
-      }, 500);
     };
 
-    recognition.onerror = (event: any) => {
-      console.error('Speech recognition error:', event.error);
-      stopDictation();
-      renderStudentPortal(container);
+    mediaRecorder.onstop = async () => {
+      const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+      audioChunks = [];
+      stream.getTracks().forEach(track => track.stop());
+
+      inputEl.value = 'Transcribing with Whisper...';
+      inputEl.disabled = true;
+
+      try {
+        const formData = new FormData();
+        formData.append('audio', audioBlob, 'recording.webm');
+        
+        const token = localStorage.getItem('stcharles_jwt_token');
+        const API_BASE = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '/api' : 'http://localhost:3001/api');
+        
+        const response = await fetch(`${API_BASE}/ai/transcribe`, {
+          method: 'POST',
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+          body: formData
+        });
+
+        if (!response.ok) throw new Error('Transcription failed');
+        const data = await response.json();
+        
+        inputEl.value = data.text || '';
+        inputEl.disabled = false;
+        
+        if (inputEl.value.trim().length > 0) {
+          setTimeout(() => {
+            container.querySelector('#btn-chat-send')?.dispatchEvent(new Event('click'));
+          }, 500);
+        }
+      } catch (err) {
+        console.error('Whisper transcription error:', err);
+        inputEl.value = '';
+        inputEl.disabled = false;
+        triggerToastNotification('Transcription Error', 'Failed to process audio with Groq.', 'danger');
+      }
     };
 
-    recognition.onend = () => {
-      isRecording = false;
-      renderStudentPortal(container);
-    };
+    mediaRecorder.start();
+    isRecording = true;
+    triggerHapticVibration([50]);
+    renderStudentPortal(container);
 
-    recognition.start();
   } catch (err) {
-    console.error('Speech recognition init failed:', err);
+    console.error('Microphone access denied or error:', err);
+    triggerToastNotification('Microphone Error', 'Please allow microphone access.', 'danger');
     isRecording = false;
     renderStudentPortal(container);
   }
 }
 
 function stopDictation(): void {
-  if (recognition) {
-    recognition.stop();
-    recognition = null;
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+    mediaRecorder = null;
   }
   isRecording = false;
 }

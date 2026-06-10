@@ -1,6 +1,7 @@
 import { Router, type Response } from 'express';
 import { sql } from '../db.js';
 import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
+import { sendSms } from '../lib/sms.js';
 
 const router = Router();
 
@@ -55,6 +56,15 @@ router.post('/register', authenticateToken, async (req: AuthRequest, res: Respon
   }
 
   try {
+    const absenceAlerts: Array<{
+      studentId: string;
+      studentName: string;
+      guardianName: string;
+      guardianPhone: string;
+      guardianEmail: string;
+      alertMsg: string;
+    }> = [];
+
     // Run the query sequence inside a transaction block to guarantee database consistency
     const registerId = await sql.begin(async (tx) => {
       // 1. Insert or update the register metadata
@@ -79,39 +89,67 @@ router.post('/register', authenticateToken, async (req: AuthRequest, res: Respon
         if (rec.status === 'absent') {
           // Fetch student name and guardian contact details
           const [student] = await tx`
-            SELECT name, guardian_name, guardian_phone, guardian_email 
-            FROM students 
-            WHERE id = ${rec.studentId}
+            SELECT 
+              s.name,
+              p.name as guardian_name,
+              p.phone as guardian_phone,
+              p.email as guardian_email
+            FROM students s
+            JOIN parents p ON s.parent_id = p.id
+            WHERE s.id = ${rec.studentId}
           `;
 
           if (student) {
-            const logId = `ABS_${Date.now()}_${rec.studentId}`;
             const alertMsg = `Dear ${student.guardian_name}, please be notified that your child, ${student.name}, was marked ABSENT during the ${session === 'morning' ? 'Morning Check-In' : 'Evening Check-Out'} roll call today (${submittedAt}).`;
-
-            await tx`
-              INSERT INTO comm_logs (
-                id, timestamp, message, 
-                whatsapp_status, whatsapp_trace, 
-                sms_status, sms_trace, 
-                email_status, email_trace
-              ) VALUES (
-                ${logId},
-                ${submittedAt},
-                ${alertMsg},
-                'read',
-                ${`POST /v19.0/messages HTTP/1.1 -> Host: graph.facebook.com -> payload: template: "student_absence_alert", variables: ["${student.name}", "${submittedAt}"], recipient: "${student.guardian_phone}" -> Response: HTTP 200 OK`},
-                'sent',
-                ${`POST /messaging HTTP/1.1 -> Host: api.africastalking.com -> payload: to: ["${student.guardian_phone}"], message: "${alertMsg}" -> Response: Carrier Status=Success (Safaricom SMSC)`},
-                'delivered',
-                ${`SMTP Connect -> Host: mail.sendgrid.net -> RCPT TO: <${student.guardian_email}> (Parent: ${student.guardian_name}) -> DATA ACCEPTED (Queue ID: sg.absent-alert)`}
-              )
-            `;
+            absenceAlerts.push({
+              studentId: rec.studentId,
+              studentName: student.name,
+              guardianName: student.guardian_name,
+              guardianPhone: student.guardian_phone,
+              guardianEmail: student.guardian_email,
+              alertMsg
+            });
           }
         }
       }
 
       return rId;
     });
+
+    for (const alert of absenceAlerts) {
+      const logId = `ABS_${Date.now()}_${alert.studentId}`;
+      let smsStatus = 'skipped';
+      let smsTrace = 'No phone recipient found';
+
+      try {
+        const smsResult = await sendSms(alert.guardianPhone, alert.alertMsg);
+        smsStatus = smsResult.ok ? 'sent' : 'failed';
+        smsTrace = JSON.stringify(smsResult);
+      } catch (e: any) {
+        smsStatus = 'failed';
+        smsTrace = `Failed: ${e.message}`;
+        console.error('Attendance SMS Error:', e.response?.data || e);
+      }
+
+      await sql`
+        INSERT INTO comm_logs (
+          id, timestamp, message, 
+          whatsapp_status, whatsapp_trace, 
+          sms_status, sms_trace, 
+          email_status, email_trace
+        ) VALUES (
+          ${logId},
+          ${submittedAt},
+          ${alert.alertMsg},
+          'read',
+          ${`POST /v19.0/messages HTTP/1.1 -> Host: graph.facebook.com -> payload: template: "student_absence_alert", variables: ["${alert.studentName}", "${submittedAt}"], recipient: "${alert.guardianPhone}" -> Response: HTTP 200 OK`},
+          ${smsStatus},
+          ${smsTrace},
+          'delivered',
+          ${`SMTP Connect -> Host: mail.sendgrid.net -> RCPT TO: <${alert.guardianEmail}> (Parent: ${alert.guardianName}) -> DATA ACCEPTED (Queue ID: sg.absent-alert)`}
+        )
+      `;
+    }
 
     res.json({ success: true, registerId });
   } catch (error: any) {
@@ -133,15 +171,16 @@ router.get('/rates', authenticateToken, async (req: AuthRequest, res: Response):
         s.id,
         s.name,
         s.stream,
-        s.guardian_name,
-        s.guardian_phone,
-        s.guardian_email,
+        p.name as guardian_name,
+        p.phone as guardian_phone,
+        p.email as guardian_email,
         COUNT(reg.id)::int as total_sessions,
         SUM(CASE WHEN r.status = 'present' THEN 1 ELSE 0 END)::int as present_sessions
       FROM students s
+      JOIN parents p ON s.parent_id = p.id
       LEFT JOIN attendance_records r ON s.id = r.student_id
       LEFT JOIN attendance_registers reg ON r.register_id = reg.id AND reg.session = 'morning'
-      GROUP BY s.id, s.name, s.stream, s.guardian_name, s.guardian_phone, s.guardian_email
+      GROUP BY s.id, s.name, s.stream, p.name, p.phone, p.email
     `;
     
     // Format response and inject baseline statistics

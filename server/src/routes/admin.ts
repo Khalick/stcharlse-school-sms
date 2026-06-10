@@ -1,6 +1,8 @@
 import { Router, type Response } from 'express';
 import { sql } from '../db.js';
 import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
+import { Resend } from 'resend';
+import { sendSms } from '../lib/sms.js';
 
 const router = Router();
 
@@ -113,7 +115,7 @@ router.get('/timetable', async (req: AuthRequest, res: Response) => {
 
 // POST /api/admin/broadcast - Log high fidelity multi-channel parental announcement
 router.post('/broadcast', async (req: AuthRequest, res: Response): Promise<void> => {
-  const { message, timestamp, targetType, targetValue } = req.body;
+  const { message, timestamp, targetType, targetValue, targetStudentIds } = req.body;
 
   if (!message || !timestamp) {
     res.status(400).json({ error: 'Missing broadcast message body or virtual timestamp.' });
@@ -132,6 +134,15 @@ router.post('/broadcast', async (req: AuthRequest, res: Response): Promise<void>
         WHERE s.stream = ${targetValue}
       `;
       recipientLabel = `Parents of ${targetValue}`;
+    } else if (targetType === 'students' && targetStudentIds && Array.isArray(targetStudentIds) && targetStudentIds.length > 0) {
+      // Multi-select: fetch by array of student IDs
+      queryStudents = await sql`
+        SELECT s.name, p.name as guardian_name, p.phone as guardian_phone, p.email as guardian_email 
+        FROM students s
+        JOIN parents p ON s.parent_id = p.id
+        WHERE s.id = ANY(${targetStudentIds})
+      `;
+      recipientLabel = `Selected ${queryStudents.length} parent(s)`;
     } else if (targetType === 'student' && targetValue) {
       queryStudents = await sql`
         SELECT s.name, p.name as guardian_name, p.phone as guardian_phone, p.email as guardian_email 
@@ -159,11 +170,97 @@ router.post('/broadcast', async (req: AuthRequest, res: Response): Promise<void>
     const emails = queryStudents.map(s => s.guardian_email).filter(Boolean);
     const names = queryStudents.map(s => `${s.guardian_name} (Parent of ${s.name})`);
 
-    const formattedPhones = phoneNumbers.length > 0 ? phoneNumbers : ['+254 712 345678'];
-    const formattedEmails = emails.length > 0 ? emails : ['parent@stcharles.sc.ke'];
+    const formattedPhones = phoneNumbers.length > 0 ? phoneNumbers.map(p => p.replace(/\s+/g, '')) : [];
+    const formattedEmails = emails.length > 0 ? emails : [];
     const formattedNames = names.length > 0 ? names : ['Default Guardian'];
 
     const logId = `LOG_${Date.now()}`;
+    
+    // 1. Send SMS via Onfon
+    let smsTrace = 'No phone recipients found';
+    let smsStatus = 'skipped';
+    if (formattedPhones.length > 0) {
+      try {
+        const result = await sendSms(formattedPhones, message);
+        console.log('Onfon SMS response:', JSON.stringify(result, null, 2));
+        smsTrace = result.trace;
+        smsStatus = result.ok ? 'sent' : 'failed';
+      } catch (e: any) {
+        smsTrace = `Failed: ${e.message}`;
+        smsStatus = 'failed';
+        console.error('Onfon Error:', e.response?.data || e);
+      }
+    }
+
+    // 2. Send Email via Resend
+    let emailTrace = 'No email recipients found';
+    let emailStatus = 'skipped';
+    if (process.env.RESEND_API_KEY && formattedEmails.length > 0) {
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      const emailResults: string[] = [];
+      let successCount = 0;
+      let failCount = 0;
+
+      // Determine sender address: use verified domain if set, otherwise onboarding@resend.dev
+      const fromAddress = process.env.RESEND_FROM_EMAIL || 'St. Charles School <onboarding@resend.dev>';
+      // If no verified domain, Resend only sends to the account owner's email.
+      // In that case, send a single admin copy with recipient list in the body.
+      const hasVerifiedDomain = !!process.env.RESEND_FROM_EMAIL;
+
+      if (hasVerifiedDomain) {
+        // Production: send individually to each parent
+        for (const recipientEmail of formattedEmails) {
+          try {
+            const { data, error } = await resend.emails.send({
+              from: fromAddress,
+              to: [recipientEmail],
+              subject: 'St. Charles School Notice',
+              text: message
+            });
+            if (error) {
+              emailResults.push(`${recipientEmail}: Failed (${error.message})`);
+              failCount++;
+            } else {
+              emailResults.push(`${recipientEmail}: Delivered (${data?.id})`);
+              successCount++;
+            }
+          } catch (e: any) {
+            emailResults.push(`${recipientEmail}: Exception (${e.message})`);
+            failCount++;
+          }
+        }
+      } else {
+        // Free tier: send admin summary copy to account owner email
+        const adminEmail = process.env.RESEND_ADMIN_EMAIL || 'schoolcharlie143@gmail.com';
+        const recipientSummary = formattedEmails.map((email, i) => `${i+1}. ${formattedNames[i] || 'Parent'} <${email}>`).join('\n');
+        try {
+          const { data, error } = await resend.emails.send({
+            from: fromAddress,
+            to: [adminEmail],
+            subject: `School Notice — Intended for ${formattedEmails.length} parent(s)`,
+            text: `BROADCAST MESSAGE:\n\n${message}\n\n---\nINTENDED RECIPIENTS (${formattedEmails.length}):\n${recipientSummary}\n\nNote: Emails could not be sent directly to parents because no verified domain is configured on Resend. Please verify a domain at resend.com/domains to enable direct parent delivery.`
+          });
+          if (error) {
+            emailResults.push(`Admin copy to ${adminEmail}: Failed (${error.message})`);
+            failCount++;
+          } else {
+            emailResults.push(`Admin copy to ${adminEmail}: Delivered (${data?.id}). Direct parent emails pending domain verification.`);
+            successCount++;
+          }
+        } catch (e: any) {
+          emailResults.push(`Admin copy to ${adminEmail}: Exception (${e.message})`);
+          failCount++;
+        }
+      }
+
+      emailTrace = emailResults.join(' | ');
+      emailStatus = failCount === 0 ? 'delivered' : (successCount > 0 ? 'partial' : 'failed');
+    }
+
+    // 3. WhatsApp (Still mocked as per user not providing Meta Token)
+    const whatsappStatus = 'skipped';
+    const whatsappTrace = 'WhatsApp requires Meta Graph API Token to be provided.';
+
     await sql`
       INSERT INTO comm_logs (
         id, timestamp, message, 
@@ -174,12 +271,12 @@ router.post('/broadcast', async (req: AuthRequest, res: Response): Promise<void>
         ${logId},
         ${timestamp},
         ${message},
-        'read',
-        ${`POST /v19.0/messages HTTP/1.1 -> Host: graph.facebook.com -> Content-Type: application/json -> payload: template_name: "school_notice_v1", variables: ["${message}"], recipients: ${JSON.stringify(formattedPhones)} -> Response: HTTP 200 OK (id: wamid.HBgLMjU0NzEyMzQ1Njc4FQIAERg)`},
-        'sent',
-        ${`POST /messaging HTTP/1.1 -> Host: api.africastalking.com -> payload: to: ${JSON.stringify(formattedPhones)}, from: "STCHARLES" -> Response: Carrier Status=Success, Sent to Safaricom SMSC Network (Target: ${recipientLabel})`},
-        'delivered',
-        ${`SMTP Connect -> Host: mail.sendgrid.net -> AUTH SUCCESS -> MAIL FROM: info@stcharles.sc.ke -> RCPT TO: ${formattedEmails.join(', ')} (Target Names: ${formattedNames.join(', ')}) -> DATA ACCEPTED (Queue ID: sg.250-ok)`}
+        ${whatsappStatus},
+        ${whatsappTrace},
+        ${smsStatus},
+        ${smsTrace},
+        ${emailStatus},
+        ${emailTrace}
       )
     `;
 

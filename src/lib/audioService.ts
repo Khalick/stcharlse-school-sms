@@ -130,24 +130,55 @@ export function speakText(text: string, onEnd?: () => void): void {
       return;
     }
     
-    // Clean markdown formatting if present
-    const cleanText = text.replace(/[*#`_\-]/g, '').replace(/\[.*?\]\(.*?\)/g, '');
+    // Clean markdown formatting and strip out image URLs so Charlie doesn't read the image code aloud
+    const cleanText = text
+      .replace(/!\[.*?\]\(.*?\)/g, '')
+      .replace(/\[.*?\]\(.*?\)/g, '')
+      .replace(/[*#`_\-]/g, '');
     
     currentUtterance = new SpeechSynthesisUtterance(cleanText);
     
-    // Set a premium voice if possible
+    // Target a high-quality "documentary / AI Advert" male voice
     const voices = window.speechSynthesis.getVoices();
-    const englishVoice = voices.find(voice => 
-      voice.lang.includes('en-GB') || 
-      voice.lang.includes('en-US') || 
-      voice.lang.includes('en-KE')
-    );
-    if (englishVoice) {
-      currentUtterance.voice = englishVoice;
+    
+    // Priority list of the best deep male voices across major OS/Browsers
+    const targetVoices = [
+      'Google UK English Male',
+      'Daniel', // macOS premium British male
+      'Arthur', // Windows premium male
+      'Microsoft Guy',
+      'Alex', // macOS standard male
+      'Fred', // macOS deep male
+      'David' // Windows standard male
+    ];
+
+    let premiumMaleVoice = null;
+    
+    for (const target of targetVoices) {
+      premiumMaleVoice = voices.find(v => v.name.includes(target));
+      if (premiumMaleVoice) break;
+    }
+
+    // Fallback to any english male voice if specific targets aren't found
+    if (!premiumMaleVoice) {
+      premiumMaleVoice = voices.find(v => 
+        (v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('boy')) && 
+        v.lang.startsWith('en')
+      );
     }
     
-    currentUtterance.rate = 1.0;
-    currentUtterance.pitch = 1.1; // Friendly higher pitch
+    // Ultimate fallback to standard UK/US English
+    if (!premiumMaleVoice) {
+      premiumMaleVoice = voices.find(v => v.lang === 'en-GB' || v.lang === 'en-US');
+    }
+
+    if (premiumMaleVoice) {
+      currentUtterance.voice = premiumMaleVoice;
+    }
+    
+    // Adjust rate and pitch to sound more authoritative and documentary-like (AI advert style)
+    currentUtterance.rate = 0.95; // Slightly slower, more deliberate pacing
+    currentUtterance.pitch = 0.85; // Deeper, more authoritative male resonance
     
     currentUtterance.onend = () => {
       currentUtterance = null;
