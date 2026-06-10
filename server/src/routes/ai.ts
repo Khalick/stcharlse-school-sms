@@ -4,7 +4,7 @@ import fs from 'fs';
 import { sql } from '../db.js';
 import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
 
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({ dest: '/tmp/' });
 const router = Router();
 
 // POST /api/ai/chat - Charlie AI student companion query endpoint
