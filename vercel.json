@@ -1,4 +1,10 @@
 {
+  "crons": [
+    {
+      "path": "/api/notifications/cron-timetable",
+      "schedule": "* * * * *"
+    }
+  ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api" },
     { "source": "/(.*)", "destination": "/index.html" }

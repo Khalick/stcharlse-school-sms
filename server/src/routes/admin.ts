@@ -126,7 +126,15 @@ router.post('/broadcast', async (req: AuthRequest, res: Response): Promise<void>
     let queryStudents: any[] = [];
     let recipientLabel = 'All Parents';
 
-    if (targetType === 'grade' && targetValue) {
+    if (targetType === 'teachers') {
+      const teachers = await sql`SELECT name as guardian_name, phone as guardian_phone, email as guardian_email FROM teachers WHERE approved = true`;
+      queryStudents = teachers.map(t => ({ ...t, name: 'Staff' }));
+      recipientLabel = 'All School Teachers';
+    } else if (targetType === 'board') {
+      const board = await sql`SELECT name as guardian_name, phone as guardian_phone, email as guardian_email FROM board_members`;
+      queryStudents = board.map(b => ({ ...b, name: 'Board Member' }));
+      recipientLabel = 'School Board of Management';
+    } else if (targetType === 'grade' && targetValue) {
       queryStudents = await sql`
         SELECT s.name, p.name as guardian_name, p.phone as guardian_phone, p.email as guardian_email 
         FROM students s

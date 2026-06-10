@@ -44,51 +44,66 @@ router.post('/chat', authenticateToken, async (req: AuthRequest, res: Response):
       }
     }
 
-    const apiKey = process.env.GROQ_API_KEY;
+    const apiKey = process.env.NVIDIA_API_KEY;
     if (!apiKey) {
-      res.status(500).json({ error: 'Groq API key not configured on server.' });
+      res.status(500).json({ error: 'NVIDIA API key not configured on server.' });
       return;
     }
 
     // 3. Request Llama 3 via Groq
     const systemPrompt = `You are Charlie, the AI Study Companion for St. Charles School in Thika Kiganjo, Kenya. 
-You are helping the student "${student.name}" (Grade: ${student.stream}) study the notes titled "${materialTitle}" (Subject: ${materialSubject}).
-Your task is to answer the student's question accurately and helpfully using the study notes context below.
-Be supportive, speak directly to the student in an encouraging and educational manner, and keep your explanations clear, concise, and appropriate for grade-school pupils.
+You are currently helping the student "${student.name}" (Grade: ${student.stream}) study "${materialTitle}" (Subject: ${materialSubject}).
+Your answers MUST be strictly aligned with the Kenyan Primary School CBC Syllabus. 
+Use very simple vocabulary, short sentences, and relatable analogies perfect for a primary school pupil. Do not rush or overcomplicate the answer.
+
+CRITICAL INSTRUCTION: Be a general-purpose tutor! If the student asks an educational question about ANY topic (like science, digestion, space, history, etc.) that is completely unrelated to the current study material, YOU MUST STILL ANSWER IT HELPFULLY using your own knowledge. Never say "I can only talk about math" or refuse to answer. Encourage their curiosity!
+
+CRITICAL LENGTH LIMIT: You must keep your response EXTREMELY short. Maximum 2 to 3 short sentences. If you talk too much, the audio system will crash. Be concise!
 
 VISUAL LEARNING INTEGRATION (CRITICAL REQUIREMENT):
-If the student asks about a physical object, organ (e.g. digestive tract, liver, stomach), process, tool, or scene, YOU MUST START YOUR RESPONSE with an educational markdown image!
-Use the free Pollinations AI engine. Replace spaces with hyphens in the URL.
-Format EXACTLY like this: \`![Alt Text](https://image.pollinations.ai/prompt/detailed-kid-friendly-educational-diagram-of-a-[topic]?width=800&height=400&nologo=true)\`
-Example: \`![Diagram of the Digestive System](https://image.pollinations.ai/prompt/highly-detailed-educational-diagram-of-the-human-digestive-system-organs-with-labels-kid-friendly-science?width=800&height=400&nologo=true)\`
+If the student asks about a physical object, organ, process, tool, or scene, YOU MUST show an educational image!
+To do this, use the exact markdown tag: [IMAGE:topic]
+Format EXACTLY like this:
+I am showing you an image of [topic].
+[IMAGE:highly detailed educational diagram of topic]
 
-DO NOT FORGET THE IMAGE MARKDOWN IF THE TOPIC IS VISUAL. Place the image at the very beginning of your response, then provide your text explanation below it.
+Example:
+I am showing you an image of the digestive tract.
+[IMAGE:highly detailed educational diagram of the human digestive tract organs kid-friendly]
+
+AUGMENTED REALITY (AR) 3D MODELS:
+If the student asks about space, astronauts, planets, robots, or cars, you MUST also show them an interactive 3D AR Model!
+To do this, use the exact markdown tag: [AR:keyword]
+Example:
+[AR:astronaut] or [AR:robot]
+
+DO NOT FORGET THE IMAGE OR AR MARKDOWN IF THE TOPIC IS VISUAL. Place the phrase and image at the very beginning of your response.
 
 STUDY HANDOUT NOTES:
 ---------------------
 ${materialContent}
 ---------------------`;
 
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'llama-3.1-8b-instant',
+        model: 'meta/llama-3.3-70b-instruct',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: query }
         ],
         temperature: 0.6,
-        max_tokens: 500
+        max_tokens: 1024
       })
     });
 
     if (!response.ok) {
       const errBody = await response.json();
-      throw new Error(`Groq API returned error status: ${response.status} - ${JSON.stringify(errBody)}`);
+      throw new Error(`NVIDIA API returned error status: ${response.status} - ${JSON.stringify(errBody)}`);
     }
 
     const json = await response.json() as any;
@@ -115,13 +130,13 @@ router.post('/parse-timetable', authenticateToken, async (req: AuthRequest, res:
   }
 
   try {
-    const apiKey = process.env.GROQ_API_KEY;
+    const apiKey = process.env.NVIDIA_API_KEY;
     if (!apiKey) {
-      res.status(500).json({ error: 'Groq API key not configured on server.' });
+      res.status(500).json({ error: 'NVIDIA API key not configured on server.' });
       return;
     }
 
-    let model = 'llama-3.1-8b-instant';
+    let model = 'meta/llama-3.3-70b-instruct';
     let messages: any[] = [];
 
     const systemPrompt = `You are a school schedule parser. Your job is to extract timetable sessions from the input text or image and return a JSON object with a single key "events" containing an array of timetable events.
@@ -137,7 +152,7 @@ Each event must contain:
 Return ONLY a valid JSON object. Do not include markdown codeblocks or conversational filler.`;
 
     if (imageBase64) {
-      model = 'llama-3.2-11b-vision-preview';
+      model = 'meta/llama-3.2-11b-vision-instruct';
       messages = [
         { role: 'system', content: systemPrompt },
         {
@@ -155,7 +170,7 @@ Return ONLY a valid JSON object. Do not include markdown codeblocks or conversat
       ];
     }
 
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -164,14 +179,14 @@ Return ONLY a valid JSON object. Do not include markdown codeblocks or conversat
       body: JSON.stringify({
         model,
         messages,
-        response_format: { type: 'json_object' },
-        temperature: 0.1
+        temperature: 0.1,
+        max_tokens: 1024
       })
     });
 
     if (!response.ok) {
       const errBody = await response.json();
-      throw new Error(`Groq API returned error status: ${response.status} - ${JSON.stringify(errBody)}`);
+      throw new Error(`NVIDIA API returned error status: ${response.status} - ${JSON.stringify(errBody)}`);
     }
 
     const json = await response.json() as any;
@@ -206,6 +221,28 @@ Return ONLY a valid JSON object. Do not include markdown codeblocks or conversat
         resolvedTeacherName: matchedTeacherName
       };
     });
+
+    // Save the entire parsed schedule into the database for Cron notifications
+    await sql`DELETE FROM timetable_events`;
+
+    for (const ev of enrichedEvents) {
+      if (!ev.stream || !ev.subject || !ev.day || !ev.startTime || !ev.endTime) continue;
+      
+      // Ensure class stream exists so foreign key constraints pass
+      await sql`INSERT INTO classes (name) VALUES (${ev.stream}) ON CONFLICT (name) DO NOTHING`;
+
+      await sql`
+        INSERT INTO timetable_events (class_name, subject, teacher_id, day_of_week, start_time, end_time)
+        VALUES (
+          ${ev.stream}, 
+          ${ev.subject}, 
+          ${ev.resolvedTeacherId || null}, 
+          ${ev.day}, 
+          ${ev.startTime}, 
+          ${ev.endTime}
+        )
+      `;
+    }
 
     res.json({ events: enrichedEvents });
   } catch (error: any) {
@@ -260,6 +297,125 @@ router.post('/transcribe', authenticateToken, upload.single('audio'), async (req
       fs.unlinkSync(req.file.path);
     }
     res.status(500).json({ error: 'Transcription failed: ' + error.message });
+  }
+});
+
+// POST /api/ai/generate-quiz - Adaptive AI Quiz Generation
+router.post('/generate-quiz', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
+  const { materialId, stream } = req.body;
+
+  if (!materialId || !stream) {
+    res.status(400).json({ error: 'Missing materialId or stream.' });
+    return;
+  }
+
+  try {
+    const [material] = await sql`SELECT * FROM study_materials WHERE id = ${materialId}`;
+    if (!material) {
+      res.status(404).json({ error: 'Study material not found.' });
+      return;
+    }
+
+    const apiKey = process.env.NVIDIA_API_KEY;
+    if (!apiKey) {
+      res.status(500).json({ error: 'NVIDIA API key not configured.' });
+      return;
+    }
+
+    const systemPrompt = `You are an expert exam setter for the Kenyan CBC Syllabus.
+Based on the following study material, generate an adaptive multiple-choice quiz tailored to the reading level of a primary school student in "${stream}".
+You MUST return a raw JSON array of 3 questions. Do NOT return markdown formatting like \`\`\`json. Return ONLY the JSON array.
+Format EXACTLY like this:
+[
+  {
+    "question": "What is the capital of Kenya?",
+    "options": ["Nairobi", "Mombasa", "Kisumu", "Nakuru"],
+    "correctIndex": 0,
+    "explanation": "Nairobi is the capital city of Kenya, located in the central part of the country."
+  }
+]
+
+STUDY MATERIAL:
+${material.content}`;
+
+    const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: 'meta/llama-3.3-70b-instruct',
+        messages: [{ role: 'system', content: systemPrompt }],
+        temperature: 0.3,
+        max_tokens: 1024
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`NVIDIA API error: ${response.status}`);
+    }
+
+    const json = await response.json() as any;
+    const answer = json.choices?.[0]?.message?.content || '[]';
+    
+    // Parse the JSON array string from Llama
+    const questions = JSON.parse(answer.trim().replace(/^```json/, '').replace(/```$/, ''));
+    res.json({ questions });
+  } catch (error: any) {
+    console.error('Quiz Generation Error:', error);
+    res.status(500).json({ error: 'Failed to generate adaptive quiz.' });
+  }
+});
+
+// POST /api/ai/generate-image - Generate high quality image via NVIDIA SDXL
+router.post('/generate-image', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
+  const { prompt } = req.body;
+  if (!prompt) {
+    res.status(400).json({ error: 'Missing image prompt.' });
+    return;
+  }
+
+  try {
+    const apiKey = process.env.NVIDIA_API_KEY;
+    if (!apiKey) {
+      res.status(500).json({ error: 'NVIDIA API key not configured.' });
+      return;
+    }
+
+    const response = await fetch('https://ai.api.nvidia.com/v1/genai/stabilityai/stable-diffusion-xl', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        text_prompts: [
+          { text: prompt, weight: 1 },
+          { text: "blurry, low quality, distorted, inappropriate", weight: -1 }
+        ],
+        cfg_scale: 5,
+        sampler: "K_EULER_ANCESTRAL",
+        steps: 25,
+        seed: 0,
+        samples: 1,
+        style_preset: "photographic"
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`NVIDIA SDXL API error: ${response.status}`);
+    }
+
+    const json = await response.json() as any;
+    const base64Image = json.artifacts?.[0]?.base64 || '';
+    res.json({ base64: base64Image });
+  } catch (err: any) {
+    console.warn('NVIDIA Image Gen Failed, falling back to Pollinations:', err.message);
+    const encodedPrompt = encodeURIComponent(prompt + ' highly detailed educational diagram kid-friendly');
+    const fallbackUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=800&height=400&nologo=true`;
+    res.json({ base64: null, url: fallbackUrl });
   }
 });
 

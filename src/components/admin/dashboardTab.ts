@@ -44,9 +44,11 @@ export async function renderDashboardTab(container: HTMLElement): Promise<void> 
           <div class="form-group">
             <label for="broadcast-target-type">Target Audience</label>
             <select id="broadcast-target-type" class="form-control" style="font-family: inherit;">
-              <option value="all">All Grades (PP1 to Grade 9)</option>
-              <option value="grade">Specific Grade Level</option>
+              <option value="all">All Parents (School-Wide)</option>
+              <option value="grade">Parents of Specific Grade</option>
               <option value="students">Select Specific Parents</option>
+              <option value="teachers">All School Teachers (Staff)</option>
+              <option value="board">School Board of Management</option>
             </select>
           </div>
           

@@ -34,6 +34,8 @@ import notificationsRouter from './routes/notifications.js';
 import adminRouter from './routes/admin.js';
 import studentsRouter from './routes/students.js';
 import aiRouter from './routes/ai.js';
+import boardRouter from './routes/board.js';
+import { reportRoutes } from './routes/reports.js';
 
 const app = express();
 const PORT = 3001;
@@ -57,6 +59,8 @@ app.use('/api/notifications', notificationsRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/students', studentsRouter);
 app.use('/api/ai', aiRouter);
+app.use('/api/board', boardRouter);
+app.use('/api/reports', reportRoutes);
 
 // Base Check-alive Health route
 app.get('/health', (req, res) => {

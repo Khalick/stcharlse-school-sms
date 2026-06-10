@@ -21,8 +21,13 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response): Prom
         t.email, 
         t.phone, 
         t.approved,
-        c.name as stream,
-        COALESCE(string_agg(DISTINCT cs.subject_name, ', '), '') as subject
+        c.name as class_teacher_stream,
+        COALESCE(
+          json_agg(
+            DISTINCT jsonb_build_object('stream', cs.class_name, 'subject', cs.subject_name)
+          ) FILTER (WHERE cs.id IS NOT NULL), 
+          '[]'
+        ) as subjects
       FROM teachers t
       LEFT JOIN classes c ON t.id = c.class_teacher_id
       LEFT JOIN class_subjects cs ON t.id = cs.teacher_id
@@ -123,10 +128,10 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response): Pro
     return;
   }
 
-  const { name, email, phone, subject, stream } = req.body;
+  const { name, email, phone, isClassTeacher, classTeacherStream, subjects } = req.body;
 
-  if (!name || !email || !subject || !stream) {
-    res.status(400).json({ error: 'Missing required teacher profile fields (name, email, subject, stream).' });
+  if (!name || !email) {
+    res.status(400).json({ error: 'Missing required teacher profile fields (name, email).' });
     return;
   }
 
@@ -142,23 +147,34 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response): Pro
       VALUES (${newId}, ${name}, ${email.trim().toLowerCase()}, ${phone || ''}, ${hashedPassword}, true)
     `;
 
-    // Assign Class Teacher stream (1-to-1)
-    await sql`
-      INSERT INTO classes (name, class_teacher_id)
-      VALUES (${stream}, ${newId})
-      ON CONFLICT (name) DO UPDATE SET class_teacher_id = ${newId}
-    `;
+    // Assign Class Teacher stream if selected
+    if (isClassTeacher && classTeacherStream) {
+      await sql`
+        INSERT INTO classes (name, class_teacher_id)
+        VALUES (${classTeacherStream}, ${newId})
+        ON CONFLICT (name) DO UPDATE SET class_teacher_id = ${newId}
+      `;
+    }
 
-    // Assign Class Subject
-    await sql`
-      INSERT INTO class_subjects (class_name, subject_name, teacher_id)
-      VALUES (${stream}, ${subject}, ${newId})
-      ON CONFLICT (class_name, subject_name) DO UPDATE SET teacher_id = ${newId}
-    `;
+    // Assign dynamic Subjects/Streams array
+    if (Array.isArray(subjects) && subjects.length > 0) {
+      for (const subj of subjects) {
+        if (subj.stream && subj.subject) {
+          // Ensure class exists
+          await sql`INSERT INTO classes (name) VALUES (${subj.stream}) ON CONFLICT (name) DO NOTHING`;
+          
+          await sql`
+            INSERT INTO class_subjects (class_name, subject_name, teacher_id)
+            VALUES (${subj.stream}, ${subj.subject}, ${newId})
+            ON CONFLICT (class_name, subject_name) DO UPDATE SET teacher_id = ${newId}
+          `;
+        }
+      }
+    }
 
     res.status(201).json({
       success: true,
-      teacher: { id: newId, name, email: email.trim().toLowerCase(), phone: phone || '', subject, stream }
+      teacher: { id: newId, name, email: email.trim().toLowerCase(), phone: phone || '', isClassTeacher, classTeacherStream, subjects }
     });
   } catch (error: any) {
     if (error.code === '23505') {
@@ -178,9 +194,9 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response): P
   }
 
   const { id } = req.params;
-  const { name, email, phone, subject, stream } = req.body;
+  const { name, email, phone, isClassTeacher, classTeacherStream, subjects } = req.body;
 
-  if (!name || !email || !subject || !stream) {
+  if (!name || !email) {
     res.status(400).json({ error: 'Missing required teacher profile fields.' });
     return;
   }
@@ -198,23 +214,35 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response): P
       WHERE id = ${id}
     `;
 
-    // Clear previous Class Teacher assignments for this teacher and insert new one
+    // Clear previous Class Teacher assignments for this teacher
     await sql`UPDATE classes SET class_teacher_id = NULL WHERE class_teacher_id = ${id}`;
-    await sql`
-      INSERT INTO classes (name, class_teacher_id)
-      VALUES (${stream}, ${id})
-      ON CONFLICT (name) DO UPDATE SET class_teacher_id = ${id}
-    `;
+    
+    if (isClassTeacher && classTeacherStream) {
+      await sql`
+        INSERT INTO classes (name, class_teacher_id)
+        VALUES (${classTeacherStream}, ${id})
+        ON CONFLICT (name) DO UPDATE SET class_teacher_id = ${id}
+      `;
+    }
 
-    // Clear previous subject assignments for this class/teacher and insert new one
-    await sql`DELETE FROM class_subjects WHERE teacher_id = ${id} AND class_name = ${stream}`;
-    await sql`
-      INSERT INTO class_subjects (class_name, subject_name, teacher_id)
-      VALUES (${stream}, ${subject}, ${id})
-      ON CONFLICT (class_name, subject_name) DO UPDATE SET teacher_id = ${id}
-    `;
+    // Clear previous subject assignments for this teacher
+    await sql`DELETE FROM class_subjects WHERE teacher_id = ${id}`;
+    
+    if (Array.isArray(subjects) && subjects.length > 0) {
+      for (const subj of subjects) {
+        if (subj.stream && subj.subject) {
+          await sql`INSERT INTO classes (name) VALUES (${subj.stream}) ON CONFLICT (name) DO NOTHING`;
+          
+          await sql`
+            INSERT INTO class_subjects (class_name, subject_name, teacher_id)
+            VALUES (${subj.stream}, ${subj.subject}, ${id})
+            ON CONFLICT (class_name, subject_name) DO UPDATE SET teacher_id = ${id}
+          `;
+        }
+      }
+    }
 
-    res.json({ success: true, teacher: { id, name, email: email.trim().toLowerCase(), phone: phone || '', subject, stream } });
+    res.json({ success: true, teacher: { id, name, email: email.trim().toLowerCase(), phone: phone || '', isClassTeacher, classTeacherStream, subjects } });
   } catch (error: any) {
     if (error.code === '23505') {
       res.status(409).json({ error: 'Another teacher already uses this email address.' });

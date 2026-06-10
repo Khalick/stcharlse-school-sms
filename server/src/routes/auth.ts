@@ -62,10 +62,15 @@ router.post('/login', async (req, res): Promise<void> => {
       // Find student by matching their ID (admission number) or First Name (first word of name)
       const studentsList = await sql`SELECT * FROM students`;
       const student = studentsList.find(s => {
-        const nameParts = s.name.trim().toLowerCase().split(/\s+/);
-        const idMatch = s.id.toLowerCase() === studentId.trim().toLowerCase();
-        const nameMatch = nameParts.includes(studentId.trim().toLowerCase());
-        return idMatch || nameMatch;
+        const query = studentId.trim().toLowerCase();
+        const fullName = s.name.trim().toLowerCase();
+        const nameParts = fullName.split(/\s+/);
+        
+        const idMatch = s.id.toLowerCase() === query;
+        const fullMatch = fullName === query;
+        const partMatch = nameParts.includes(query);
+        
+        return idMatch || fullMatch || partMatch;
       });
 
       if (student && (verifyPassword(password, student.password) || password.trim().toUpperCase() === student.id.toUpperCase())) {
@@ -73,7 +78,9 @@ router.post('/login', async (req, res): Promise<void> => {
           id: student.id,
           name: student.name,
           role: 'student',
-          stream: student.stream
+          stream: student.stream,
+          xp_points: student.xp_points || 0,
+          current_streak: student.current_streak || 0
         };
       }
     }
@@ -98,9 +105,9 @@ router.post('/login', async (req, res): Promise<void> => {
 
 // POST /api/auth/register-teacher
 router.post('/register-teacher', async (req, res): Promise<void> => {
-  const { name, email, phone, subject, stream, password } = req.body;
+  const { name, email, phone, subjects, stream, password } = req.body;
 
-  if (!name || !email || !subject || !stream || !password) {
+  if (!name || !email || !subjects || !subjects.length || !stream || !password) {
     res.status(400).json({ error: 'Missing required teacher registration fields.' });
     return;
   }
@@ -126,11 +133,13 @@ router.post('/register-teacher', async (req, res): Promise<void> => {
     `;
 
     // Associate their subject teaching in that stream
-    await sql`
-      INSERT INTO class_subjects (class_name, subject_name, teacher_id)
-      VALUES (${stream}, ${subject}, ${newId})
-      ON CONFLICT (class_name, subject_name) DO UPDATE SET teacher_id = ${newId}
-    `;
+    for (const sub of subjects) {
+      await sql`
+        INSERT INTO class_subjects (class_name, subject_name, teacher_id)
+        VALUES (${stream}, ${sub}, ${newId})
+        ON CONFLICT (class_name, subject_name) DO UPDATE SET teacher_id = ${newId}
+      `;
+    }
 
     res.status(201).json({
       success: true,

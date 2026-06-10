@@ -4,6 +4,7 @@ import { getDb } from '../../data/mockDb';
 
 
 let searchQuery = '';
+let currentAdminStreamFilter = 'All Streams';
 
 export async function renderStudentsTab(container: HTMLElement, streamFilter?: string, forceReadOnly?: boolean): Promise<void> {
   const db = getDb();
@@ -30,30 +31,59 @@ export async function renderStudentsTab(container: HTMLElement, streamFilter?: s
 
   const isReadOnlyWorkspace = forceReadOnly || (students.length > 0 && students[0].isReadOnly);
 
+  // Group students by stream
+  const allStreams = Array.from(new Set(students.map(s => s.stream))).sort();
+  
+  if (!isTeacher && currentAdminStreamFilter !== 'All Streams') {
+    students = students.filter(s => s.stream === currentAdminStreamFilter);
+  }
+
+  const streams = Array.from(new Set(students.map(s => s.stream))).sort();
+  let tablesHtml = '';
+
+  if (students.length === 0) {
+    tablesHtml = '<div class="table-wrapper"><p style="text-align:center;color:var(--text-light);padding:20px;">No records found</p></div>';
+  } else {
+    for (const stream of streams) {
+      const streamStudents = students.filter(s => s.stream === stream);
+      tablesHtml += `
+        <h3 style="margin-top:24px; margin-bottom:8px; color:var(--primary-dark); border-bottom:2px solid var(--border); padding-bottom:4px;">${stream}</h3>
+        <div class="table-wrapper"><table class="premium-table"><thead><tr>
+          <th>ID</th><th>Name</th><th>Guardian</th><th>Attendance</th><th>Actions</th>
+        </tr></thead><tbody>
+          ${streamStudents.map(s => `<tr>
+            <td><strong>${s.id}</strong></td><td>${s.name}</td>
+            <td>${s.guardianName} ${s.guardianPhone ? `(${s.guardianPhone})` : ''}</td>
+            <td><span class="badge ${s.attendanceRate >= 95 ? 'badge-success' : 'badge-warning'}">${s.attendanceRate}%</span></td>
+            <td><div class="action-btn-group">
+              ${isReadOnlyWorkspace ? `<span style="font-size:0.85rem; color:var(--text-light); font-style:italic;">Read-Only (Class Teacher Only)</span>` : `
+                <button class="btn-action" data-action="edit-stu" data-id="${s.id}">Edit</button>
+                <button class="btn-action warning" data-action="pwd-stu" data-id="${s.id}">Reset Pwd</button>
+                <button class="btn-action danger" data-action="del-stu" data-id="${s.id}">Delete</button>
+              `}
+            </div></td>
+          </tr>`).join('')}
+        </tbody></table></div>
+      `;
+    }
+  }
+
   container.innerHTML = `
     <div class="card-header-with-action"><h2 class="card-title">${isTeacher ? 'Class Students Roster' : 'Student Directory'}</h2>
       ${isReadOnlyWorkspace ? '' : '<button class="btn-accent" id="btn-open-admission">Register New Student</button>'}</div>
-    <div class="search-bar-container">
-      <input type="text" id="stu-search" class="form-control" placeholder="Search by name, stream, or ID..." value="${searchQuery}">
+    <div class="search-bar-container" style="display:flex; gap:12px;">
+      ${!isTeacher ? `
+        <select id="admin-stream-filter" class="form-control" style="width:200px; font-family:inherit;">
+          <option value="All Streams" ${currentAdminStreamFilter === 'All Streams' ? 'selected' : ''}>All Grades</option>
+          ${allStreams.map(g => `<option value="${g}" ${currentAdminStreamFilter === g ? 'selected' : ''}>${g}</option>`).join('')}
+        </select>
+      ` : ''}
+      <input type="text" id="stu-search" class="form-control" placeholder="Search by name, stream, or ID..." value="${searchQuery}" style="flex:1;">
       <button class="btn-primary" id="btn-stu-search">Search</button>
     </div>
-    <div class="table-wrapper"><table class="premium-table"><thead><tr>
-      <th>ID</th><th>Name</th><th>Stream</th><th>Guardian</th><th>Attendance</th><th>Actions</th>
-    </tr></thead><tbody>
-      ${students.map(s => `<tr>
-        <td><strong>${s.id}</strong></td><td>${s.name}</td><td>${s.stream}</td>
-        <td>${s.guardianName} ${s.guardianPhone ? `(${s.guardianPhone})` : ''}</td>
-        <td><span class="badge ${s.attendanceRate >= 95 ? 'badge-success' : 'badge-warning'}">${s.attendanceRate}%</span></td>
-        <td><div class="action-btn-group">
-          ${isReadOnlyWorkspace ? `<span style="font-size:0.85rem; color:var(--text-light); font-style:italic;">Read-Only (Class Teacher Only)</span>` : `
-            <button class="btn-action" data-action="edit-stu" data-id="${s.id}">Edit</button>
-            <button class="btn-action warning" data-action="pwd-stu" data-id="${s.id}">Reset Pwd</button>
-            <button class="btn-action danger" data-action="del-stu" data-id="${s.id}">Delete</button>
-          `}
-        </div></td>
-      </tr>`).join('')}
-      ${!students.length ? '<tr><td colspan="6" style="text-align:center;color:var(--text-light)">No records found</td></tr>' : ''}
-    </tbody></table></div>
+    <div id="students-tables-container">
+      ${tablesHtml}
+    </div>
     <div id="stu-modal-container"></div>
   `;
 
@@ -62,6 +92,14 @@ export async function renderStudentsTab(container: HTMLElement, streamFilter?: s
   const doSearch = () => { searchQuery = (container.querySelector('#stu-search') as HTMLInputElement)?.value || ''; renderStudentsTab(container, streamFilter, forceReadOnly); };
   container.querySelector('#btn-stu-search')?.addEventListener('click', doSearch);
   container.querySelector('#stu-search')?.addEventListener('keyup', (e) => { if ((e as KeyboardEvent).key === 'Enter') doSearch(); });
+
+  // Admin Stream Filter
+  if (!isTeacher) {
+    container.querySelector('#admin-stream-filter')?.addEventListener('change', (e) => {
+      currentAdminStreamFilter = (e.target as HTMLSelectElement).value;
+      renderStudentsTab(container, streamFilter, forceReadOnly);
+    });
+  }
 
   // Admit
   container.querySelector('#btn-open-admission')?.addEventListener('click', () => showStudentModal(container, null, streamFilter));

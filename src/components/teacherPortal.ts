@@ -4,7 +4,7 @@ import { apiClient } from '../data/apiClient';
 import { renderStudentsTab } from './admin/studentsTab.js';
 
 // Keep track of active tab in teacher portal
-let activeTeacherTab: 'attendance' | 'students' | 'materials' = 'attendance';
+let activeTeacherTab: 'attendance' | 'students' | 'materials' | 'analytics' | 'reports' = 'attendance';
 
 // Keep track of active workspace selection for teacher
 interface WorkspaceOption {
@@ -43,22 +43,22 @@ export async function renderTeacherPortal(container: HTMLElement): Promise<void>
       return;
     }
 
-    // 2. Build Workspaces dynamically from logged-in user profile assignments
+    // 2. Build Workspaces dynamically from fetched teacher profile
     const workspaces: WorkspaceOption[] = [];
-    if (db.currentUser?.stream) {
+    if (teacher.class_teacher_stream) {
       workspaces.push({
         type: 'class',
-        stream: db.currentUser.stream,
-        label: `Class Teacher: ${db.currentUser.stream}`
+        stream: teacher.class_teacher_stream,
+        label: `Class Teacher: ${teacher.class_teacher_stream}`
       });
     }
-    if (db.currentUser?.assignments) {
-      db.currentUser.assignments.forEach(a => {
+    if (teacher.subjects && Array.isArray(teacher.subjects)) {
+      teacher.subjects.forEach((a: any) => {
         workspaces.push({
           type: 'subject',
-          stream: a.className,
-          subject: a.subjectName,
-          label: `Subject: ${a.subjectName} (${a.className})`
+          stream: a.stream,
+          subject: a.subject,
+          label: `Subject: ${a.subject} (${a.stream})`
         });
       });
     }
@@ -123,9 +123,13 @@ export async function renderTeacherPortal(container: HTMLElement): Promise<void>
 
       <!-- Workspace Tab Selector -->
       <div class="admin-tabs">
-        <button class="admin-tab-btn ${activeTeacherTab === 'attendance' ? 'active' : ''}" data-tab="attendance">Attendance Registers</button>
+        ${activeWorkspace.type === 'class' ? `
+          <button class="admin-tab-btn ${activeTeacherTab === 'attendance' ? 'active' : ''}" data-tab="attendance">Attendance Registers</button>
+        ` : ''}
         <button class="admin-tab-btn ${activeTeacherTab === 'students' ? 'active' : ''}" data-tab="students">Students Roster</button>
         <button class="admin-tab-btn ${activeTeacherTab === 'materials' ? 'active' : ''}" data-tab="materials">Study Resources</button>
+        <button class="admin-tab-btn ${activeTeacherTab === 'analytics' ? 'active' : ''}" data-tab="analytics">Student Analytics</button>
+        <button class="admin-tab-btn ${activeTeacherTab === 'reports' ? 'active' : ''}" data-tab="reports">Report Cards</button>
       </div>
 
       <div id="teacher-active-tab-panel" style="margin-top: 20px;"></div>
@@ -137,6 +141,10 @@ export async function renderTeacherPortal(container: HTMLElement): Promise<void>
       const match = workspaces.find(w => w.label === selectedLabel);
       if (match) {
         activeWorkspace = match;
+        // Kick out of attendance tab if they switched to a subject workspace
+        if (activeWorkspace.type === 'subject' && activeTeacherTab === 'attendance') {
+          activeTeacherTab = 'students';
+        }
         // Keep active tab, but force reload data
         renderTeacherPortal(container);
       }
@@ -324,12 +332,106 @@ export async function renderTeacherPortal(container: HTMLElement): Promise<void>
         </section>
       `;
       bindTeacherEvents(container, teacher, streamStudents);
+    } else if (activeTeacherTab === 'analytics') {
+      const totalStudents = streamStudents.length;
+      const avgAttendance = totalStudents > 0 ? Math.round(streamStudents.reduce((sum, s) => sum + (s.attendanceRate || 0), 0) / totalStudents) : 0;
+      
+      const atRiskStudents = streamStudents.filter(s => (s.attendanceRate || 0) < 75 || (s.xp_points || 0) < 50);
+      const topPerformers = [...streamStudents].sort((a, b) => (b.xp_points || 0) - (a.xp_points || 0)).slice(0, 3);
+      
+      tabPanel.innerHTML = `
+        <section class="card col-12 relative-card">
+          <h2 class="card-title" style="margin-bottom:12px;">Predictive Mastery Analytics</h2>
+          <p style="color:var(--text-light); font-size:0.9rem; margin-bottom:24px;">AI-driven performance and risk calculations for <strong>${activeWorkspace.stream}</strong>.</p>
+          
+          <div style="display:flex; flex-wrap:wrap; gap:20px; margin-bottom: 24px;">
+            <div style="flex:1; min-width:250px; background:linear-gradient(135deg, #e0f7fa 0%, #b2ebf2 100%); border:1px solid var(--border); border-radius:12px; padding:24px; text-align:center; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+              <h4 style="color:var(--primary-dark); margin-bottom:8px; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;">Class Average Attendance</h4>
+              <div style="font-size:3rem; font-weight:700; color:var(--primary);">${avgAttendance}%</div>
+            </div>
+            <div style="flex:1; min-width:250px; background:linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%); border:1px solid var(--border); border-radius:12px; padding:24px; text-align:center; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+              <h4 style="color:#c62828; margin-bottom:8px; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;">At-Risk Students</h4>
+              <div style="font-size:3rem; font-weight:700; color:#b71c1c;">${atRiskStudents.length}</div>
+              <p style="color:#d32f2f; font-size:0.8rem; margin-top:8px;">Requires intervention</p>
+            </div>
+          </div>
+          
+          <div style="display:flex; flex-wrap:wrap; gap:20px;">
+            <div style="flex:1; min-width: 300px;">
+              <h4 style="margin-bottom: 12px; color: var(--primary);">🏆 Top Performers (XP)</h4>
+              <ul style="list-style: none; padding: 0;">
+                ${topPerformers.length > 0 ? topPerformers.map((s, i) => `
+                  <li style="display:flex; justify-content:space-between; padding: 12px; background: #fafafa; border-radius: 8px; margin-bottom: 8px; border-left: 4px solid var(--gold);">
+                    <span style="font-weight: 600;">${i+1}. ${s.name}</span>
+                    <span style="color: var(--primary); font-weight: 700;">⭐ ${s.xp_points || 0} XP</span>
+                  </li>
+                `).join('') : '<li style="padding:12px; color:var(--text-light); font-size:0.9rem;">No data available.</li>'}
+              </ul>
+            </div>
+            
+            <div style="flex:1; min-width: 300px;">
+              <h4 style="margin-bottom: 12px; color: #c62828;">⚠️ Action Required</h4>
+              <ul style="list-style: none; padding: 0;">
+                ${atRiskStudents.length > 0 ? atRiskStudents.map(s => `
+                  <li style="display:flex; flex-direction:column; padding: 12px; background: #fff5f5; border-radius: 8px; margin-bottom: 8px; border-left: 4px solid #f44336;">
+                    <strong style="color: #d32f2f;">${s.name} (${s.id})</strong>
+                    <span style="font-size:0.85rem; color: #7f0000; margin-top: 4px;">Attendance: ${s.attendanceRate || 0}% | XP: ${s.xp_points || 0}</span>
+                  </li>
+                `).join('') : '<li style="padding:12px; color:var(--text-light); font-size:0.9rem;">All students are performing well!</li>'}
+              </ul>
+            </div>
+          </div>
+        </section>
+      `;
+    } else if (activeTeacherTab === 'reports') {
+      tabPanel.innerHTML = `
+        <section class="card col-12 relative-card">
+          <h2 class="card-title" style="margin-bottom:12px;">Automated Report Cards</h2>
+          <p style="color:var(--text-light); font-size:0.9rem; margin-bottom:24px;">Generate end-of-term academic reports for students in <strong>${activeWorkspace.stream}</strong>.</p>
+          
+          <div class="table-wrapper">
+            <table class="premium-table">
+              <thead>
+                <tr>
+                  <th>Student Name</th>
+                  <th>ID</th>
+                  <th>Term Average</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${streamStudents.slice(0, 5).map(student => `
+                  <tr>
+                    <td>${student.name}</td>
+                    <td><strong>${student.id}</strong></td>
+                    <td>--</td>
+                    <td><span class="badge badge-warning" style="background:#FEF3C7; color:#D97706;" data-status-id="${student.id}">Pending Grades</span></td>
+                    <td><button class="btn-action" data-action="draft-report" data-id="${student.id}" style="font-size:0.8rem;">Draft Report</button></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </section>
+        <div id="teacher-modal-container"></div>
+      `;
+      
+      // Bind Draft Report buttons
+      const mc = tabPanel.querySelector('#teacher-modal-container') as HTMLElement;
+      tabPanel.querySelectorAll('[data-action="draft-report"]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const studentId = (e.currentTarget as HTMLElement).dataset.id;
+          const student = streamStudents.find(s => s.id === studentId);
+          if (student && activeWorkspace) showDraftReportModal(mc, student, activeWorkspace.stream);
+        });
+      });
     }
 
     // Bind tab selectors
     container.querySelectorAll('.admin-tab-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
-        const tab = (e.currentTarget as HTMLElement).dataset.tab as 'attendance' | 'students' | 'materials';
+        const tab = (e.currentTarget as HTMLElement).dataset.tab as any;
         if (tab) {
           activeTeacherTab = tab;
           renderTeacherPortal(container);
@@ -527,8 +629,8 @@ function bindTeacherEvents(container: HTMLElement, teacher: any, streamStudents:
     
     const payload = {
       title: titleInput.value.trim(),
-      subject: activeWorkspace ? (activeWorkspace.subject || teacher.subject.split(', ')[0]) : teacher.subject.split(', ')[0],
-      grade: activeWorkspace ? activeWorkspace.stream : teacher.stream,
+      subject: (activeWorkspace && activeWorkspace.subject) ? activeWorkspace.subject : (teacher.subjects && teacher.subjects.length > 0 ? teacher.subjects[0].subject : 'General'),
+      grade: activeWorkspace ? activeWorkspace.stream : (teacher.class_teacher_stream || 'General'),
       authorId: teacher.id,
       content: contentInput.value.trim()
     };
@@ -668,4 +770,118 @@ async function loadTeacherWeeklyGrid(container: HTMLElement, stream: string) {
   } catch (err: any) {
     gridContainer.innerHTML = `<p style="text-align:center; color:var(--crimson); padding:12px 0; margin:0;">Failed to load grid: ${err.message}</p>`;
   }
+}
+
+function showDraftReportModal(container: HTMLElement, student: any, stream: string) {
+  let subjects: string[] = [];
+  if (stream.startsWith('Pre') || stream === 'Grade 1' || stream === 'Grade 2' || stream === 'Grade 3') {
+    subjects = ['Mathematics Activities', 'English Language Activities', 'Kiswahili Language Activities', 'Environmental Activities', 'Hygiene and Nutrition Activities', 'CRE / IRE / HRE', 'Movement and Creative Activities'];
+  } else if (stream === 'Grade 4' || stream === 'Grade 5' || stream === 'Grade 6') {
+    subjects = ['Mathematics', 'English', 'Kiswahili', 'Science and Technology', 'Agriculture', 'Home Science', 'Creative Arts', 'Physical and Health Education', 'CRE / IRE / HRE', 'Social Studies'];
+  } else {
+    subjects = ['English', 'Kiswahili', 'Mathematics', 'Integrated Science', 'Health Education', 'Pre-Technical and Pre-Career Education', 'Social Studies', 'Religious Education', 'Business Studies', 'Agriculture', 'Life Skills Education', 'Sports and Physical Education'];
+  }
+
+  container.innerHTML = `
+    <div class="modal-overlay">
+      <div class="modal-content" style="max-width: 600px;">
+        <div class="modal-header">
+          <h3>Draft Report Card: ${student.name}</h3>
+          <button class="modal-close-btn" id="close-report-modal">×</button>
+        </div>
+        <form id="report-form">
+          <div class="modal-body" style="max-height: 60vh; overflow-y: auto;">
+            <div style="display:flex; gap:12px; margin-bottom: 16px;">
+              <div class="form-group" style="flex:1;">
+                <label>Academic Term</label>
+                <select id="report-term" class="form-control" required>
+                  <option value="Term 1">Term 1</option>
+                  <option value="Term 2">Term 2</option>
+                  <option value="Term 3">Term 3</option>
+                </select>
+              </div>
+              <div class="form-group" style="flex:1;">
+                <label>Academic Year</label>
+                <input type="number" id="report-year" class="form-control" value="${new Date().getFullYear()}" required>
+              </div>
+            </div>
+
+            <h4 style="margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 4px;">Subject Grades (0-100)</h4>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+              ${subjects.map(sub => `
+                <div class="form-group">
+                  <label style="font-size: 0.8rem;">${sub}</label>
+                  <input type="number" class="form-control report-score-input" data-subject="${sub}" min="0" max="100" placeholder="Score">
+                </div>
+              `).join('')}
+            </div>
+
+            <div class="form-group">
+              <label>Class Teacher Remarks</label>
+              <textarea id="report-comments" class="form-control" rows="3" placeholder="Enter overall performance remarks..."></textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn-secondary" id="cancel-report-modal">Cancel</button>
+            <button type="submit" class="btn-primary">Save Draft Report</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+
+  const close = () => { container.innerHTML = ''; };
+  container.querySelector('#close-report-modal')?.addEventListener('click', close);
+  container.querySelector('#cancel-report-modal')?.addEventListener('click', close);
+
+  container.querySelector('#report-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const grades: Record<string, number> = {};
+    container.querySelectorAll('.report-score-input').forEach((input: any) => {
+      if (input.value) {
+        grades[input.dataset.subject] = Number(input.value);
+      }
+    });
+
+    const payload = {
+      studentId: student.id,
+      stream: stream,
+      term: (container.querySelector('#report-term') as HTMLSelectElement).value,
+      year: parseInt((container.querySelector('#report-year') as HTMLInputElement).value, 10),
+      comments: (container.querySelector('#report-comments') as HTMLTextAreaElement).value.trim(),
+      grades
+    };
+
+    try {
+      await apiClient.post('/reports', payload);
+      
+      // Optimistically update UI status
+      const reportStatusBadge = document.getElementById(`report-status-${student.id}`);
+      if (reportStatusBadge) {
+        reportStatusBadge.textContent = 'Draft Saved';
+        reportStatusBadge.style.color = '#065F46';
+        reportStatusBadge.style.backgroundColor = '#D1FAE5';
+      }
+      
+      triggerToastNotification('Report Saved', 'Student report card drafted successfully.', 'info');
+      close();
+      
+      const btn = document.querySelector(`[data-action="draft-report"][data-id="${student.id}"]`);
+      if (btn) {
+        const row = btn.closest('tr');
+        if (row) {
+          const badge = row.querySelector(`[data-status-id="${student.id}"]`);
+          if (badge) {
+            badge.className = 'badge badge-success';
+            badge.textContent = 'Draft Saved';
+            badge.setAttribute('style', 'background:#D1FAE5; color:#065F46;');
+          }
+          btn.textContent = 'Edit Report';
+        }
+      }
+    } catch (err: any) {
+      triggerToastNotification('Error', 'Failed to save report: ' + err.message, 'danger');
+    }
+  });
 }

@@ -64,6 +64,11 @@ export async function initDb(): Promise<void> {
     
     // 1. Core safety columns
     await sql`ALTER TABLE teachers ADD COLUMN IF NOT EXISTS approved BOOLEAN DEFAULT FALSE`;
+    
+    // 1.5 Student Gamification columns
+    await sql`ALTER TABLE students ADD COLUMN IF NOT EXISTS xp_points INT DEFAULT 0`;
+    await sql`ALTER TABLE students ADD COLUMN IF NOT EXISTS current_streak INT DEFAULT 0`;
+    await sql`ALTER TABLE students ADD COLUMN IF NOT EXISTS last_active_date DATE`;
 
     // 2. Create parents table
     await sql`
@@ -94,6 +99,70 @@ export async function initDb(): Promise<void> {
         subject_name VARCHAR(100) NOT NULL,
         teacher_id VARCHAR(50) REFERENCES teachers(id) ON DELETE CASCADE,
         CONSTRAINT unique_class_subject UNIQUE (class_name, subject_name)
+      )
+    `;
+
+    // 4.5. Create board_members table
+    await sql`
+      CREATE TABLE IF NOT EXISTS board_members (
+        id VARCHAR(50) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        phone VARCHAR(50) UNIQUE NOT NULL,
+        email VARCHAR(255) UNIQUE,
+        title VARCHAR(100),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+
+    // 4.6. Create timetable_events table
+    await sql`
+      CREATE TABLE IF NOT EXISTS timetable_events (
+        id SERIAL PRIMARY KEY,
+        class_name VARCHAR(50) REFERENCES classes(name) ON DELETE CASCADE,
+        subject VARCHAR(100) NOT NULL,
+        teacher_id VARCHAR(50) REFERENCES teachers(id) ON DELETE SET NULL,
+        day_of_week VARCHAR(20) NOT NULL,
+        start_time TIME NOT NULL,
+        end_time TIME NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+
+    // 4.7. Create reports table
+    await sql`
+      CREATE TABLE IF NOT EXISTS reports (
+        id SERIAL PRIMARY KEY,
+        student_id VARCHAR(50) REFERENCES students(id) ON DELETE CASCADE,
+        stream VARCHAR(50) NOT NULL,
+        term VARCHAR(20) NOT NULL,
+        year INT NOT NULL,
+        teacher_comments TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (student_id, term, year)
+      )
+    `;
+
+    // 4.8. Create report_grades table
+    await sql`
+      CREATE TABLE IF NOT EXISTS report_grades (
+        id SERIAL PRIMARY KEY,
+        report_id INT REFERENCES reports(id) ON DELETE CASCADE,
+        subject VARCHAR(100) NOT NULL,
+        score INT NOT NULL,
+        grade VARCHAR(2) NOT NULL,
+        UNIQUE (report_id, subject)
+      )
+    `;
+
+    // 4.9. Create study_hub_messages table for collaborative learning
+    await sql`
+      CREATE TABLE IF NOT EXISTS study_hub_messages (
+        id SERIAL PRIMARY KEY,
+        stream VARCHAR(50) NOT NULL,
+        sender_name VARCHAR(100) NOT NULL,
+        sender_role VARCHAR(20) NOT NULL,
+        message TEXT NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )
     `;
 

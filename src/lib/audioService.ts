@@ -120,6 +120,14 @@ export function triggerHapticVibration(pattern: number[] = [100, 50, 100]): void
  */
 let currentUtterance: SpeechSynthesisUtterance | null = null;
 
+if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+  // Pre-load voices to avoid async empty array bugs on first TTS call
+  window.speechSynthesis.onvoiceschanged = () => {
+    window.speechSynthesis.getVoices();
+  };
+  window.speechSynthesis.getVoices();
+}
+
 export function speakText(text: string, onEnd?: () => void): void {
   try {
     stopSpeaking();
@@ -144,8 +152,10 @@ export function speakText(text: string, onEnd?: () => void): void {
     // Priority list of the best deep male voices across major OS/Browsers
     const targetVoices = [
       'Google UK English Male',
-      'Daniel', // macOS premium British male
       'Arthur', // Windows premium male
+      'Daniel', // macOS premium British male
+      'Rishi',
+      'Brian',
       'Microsoft Guy',
       'Alex', // macOS standard male
       'Fred', // macOS deep male
@@ -162,14 +172,24 @@ export function speakText(text: string, onEnd?: () => void): void {
     // Fallback to any english male voice if specific targets aren't found
     if (!premiumMaleVoice) {
       premiumMaleVoice = voices.find(v => 
-        (v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('boy')) && 
+        (v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('boy') || v.name.toLowerCase().includes('guy')) && 
         v.lang.startsWith('en')
       );
     }
     
-    // Ultimate fallback to standard UK/US English
+    // Ultimate fallback: Try to find ANY voice that doesn't scream "female" (like Samantha, Zira, Google US English)
     if (!premiumMaleVoice) {
-      premiumMaleVoice = voices.find(v => v.lang === 'en-GB' || v.lang === 'en-US');
+      premiumMaleVoice = voices.find(v => 
+        v.lang.startsWith('en') && 
+        !v.name.toLowerCase().includes('samantha') && 
+        !v.name.toLowerCase().includes('zira') &&
+        !v.name.toLowerCase().includes('female')
+      );
+    }
+
+    if (!premiumMaleVoice && voices.length > 0) {
+      // If we still have nothing, just pick the first English voice available
+      premiumMaleVoice = voices.find(v => v.lang.startsWith('en')) || voices[0];
     }
 
     if (premiumMaleVoice) {
@@ -177,7 +197,7 @@ export function speakText(text: string, onEnd?: () => void): void {
     }
     
     // Adjust rate and pitch to sound more authoritative and documentary-like (AI advert style)
-    currentUtterance.rate = 0.95; // Slightly slower, more deliberate pacing
+    currentUtterance.rate = 1.0; // Normal pace
     currentUtterance.pitch = 0.85; // Deeper, more authoritative male resonance
     
     currentUtterance.onend = () => {

@@ -2,56 +2,73 @@ import { triggerToastNotification } from '../simulatorBar';
 import { apiClient } from '../../data/apiClient';
 import { showConfirm } from './studentsTab';
 
+let currentTimetableFilter = 'All Streams';
+
 export async function renderTimetableTab(container: HTMLElement): Promise<void> {
-  const timetable = await apiClient.get<any[]>('/admin/timetable');
+  const allEvents = await apiClient.get<any[]>('/admin/timetable');
   const teachers = await apiClient.get<any[]>('/teachers');
 
+  let timetable = allEvents;
+  if (currentTimetableFilter !== 'All Streams') {
+    timetable = allEvents.filter((e: any) => e.stream === currentTimetableFilter);
+  }
+
   const fmt = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+
+  const allStreams = Array.from(new Set(allEvents.map((e: any) => e.stream))).sort();
+  const streams = Array.from(new Set(timetable.map((e: any) => e.stream))).sort();
+  let tablesHtml = '';
+  
+  if (timetable.length === 0) {
+    tablesHtml = '<div class="table-wrapper"><p style="text-align:center;color:var(--text-light);padding:20px;">No schedule events configured</p></div>';
+  } else {
+    for (const stream of streams) {
+      // Sort by start_time so subjects appear chronologically
+      const streamEvents = timetable.filter(e => e.stream === stream).sort((a, b) => a.start_time - b.start_time);
+      tablesHtml += `
+        <h3 style="margin-top:24px; margin-bottom:8px; color:var(--primary-dark); border-bottom:2px solid var(--border); padding-bottom:4px;">${stream} Schedule</h3>
+        <div class="table-wrapper"><table class="premium-table"><thead><tr>
+          <th>ID</th><th>Time slot</th><th>Subject</th><th>Room</th><th>Assigned Teacher</th><th>Actions</th>
+        </tr></thead><tbody>
+          ${streamEvents.map(ev => `<tr>
+            <td><strong>${ev.id}</strong></td>
+            <td>${fmt(ev.start_time)} - ${fmt(ev.end_time)}</td>
+            <td>${ev.subject}</td>
+            <td>${ev.room}</td>
+            <td>${ev.teacher_name} (${ev.teacher_id})</td>
+            <td><div class="action-btn-group">
+              <button class="btn-action" data-action="edit-ev" data-id="${ev.id}">Edit</button>
+              <button class="btn-action danger" data-action="del-ev" data-id="${ev.id}">Delete</button>
+            </div></td>
+          </tr>`).join('')}
+        </tbody></table></div>
+      `;
+    }
+  }
 
   container.innerHTML = `
     <div class="card-header-with-action">
       <h2 class="card-title">Class Schedule Timetable</h2>
       <div class="action-btn-group" style="display: flex; gap: 8px;">
+        <select id="tt-stream-filter" class="form-control" style="width:200px; font-family:inherit;">
+          <option value="All Streams" ${currentTimetableFilter === 'All Streams' ? 'selected' : ''}>All Grades</option>
+          ${allStreams.map((g: unknown) => `<option value="${g as string}" ${currentTimetableFilter === g ? 'selected' : ''}>${g as string}</option>`).join('')}
+        </select>
         <button class="btn-accent" id="btn-bulk-import-ai" style="background: var(--navy); color: var(--gold-light); border: 1px solid var(--gold-light);">Bulk Import Timetable (AI)</button>
         <button class="btn-accent" id="btn-add-event">Add Schedule Event</button>
       </div>
     </div>
-    <div class="table-wrapper">
-      <table class="premium-table">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Time slot</th>
-            <th>Subject</th>
-            <th>Class Stream</th>
-            <th>Room</th>
-            <th>Assigned Teacher</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${timetable.map(ev => `
-            <tr>
-              <td><strong>${ev.id}</strong></td>
-              <td>${fmt(ev.start_time)} - ${fmt(ev.end_time)}</td>
-              <td>${ev.subject}</td>
-              <td>${ev.stream}</td>
-              <td>${ev.room}</td>
-              <td>${ev.teacher_name} (${ev.teacher_id})</td>
-              <td>
-                <div class="action-btn-group">
-                  <button class="btn-action" data-action="edit-ev" data-id="${ev.id}">Edit</button>
-                  <button class="btn-action danger" data-action="del-ev" data-id="${ev.id}">Delete</button>
-                </div>
-              </td>
-            </tr>
-          `).join('')}
-          ${timetable.length === 0 ? '<tr><td colspan="7" style="text-align:center;color:var(--text-light)">No schedule events configured</td></tr>' : ''}
-        </tbody>
-      </table>
+    <div id="timetable-tables-container">
+      ${tablesHtml}
     </div>
     <div id="ev-modal-container"></div>
   `;
+
+  // Bind Filter Change
+  container.querySelector('#tt-stream-filter')?.addEventListener('change', (e) => {
+    currentTimetableFilter = (e.target as HTMLSelectElement).value;
+    renderTimetableTab(container);
+  });
 
   // Bind Bulk Import click
   container.querySelector('#btn-bulk-import-ai')?.addEventListener('click', () => {

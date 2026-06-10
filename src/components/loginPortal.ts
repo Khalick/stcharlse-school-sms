@@ -129,14 +129,17 @@ function renderTeacherRegistrationForm(): string {
         <input type="text" id="reg-phone" class="form-control" placeholder="e.g. +254 721 111222">
       </div>
       <div class="form-group">
-        <label for="reg-subject">Subject Specialization</label>
-        <input type="text" id="reg-subject" class="form-control" placeholder="e.g. Science" required>
-      </div>
-      <div class="form-group">
-        <label for="reg-stream">Class Stream Assignment</label>
+        <label for="reg-stream">Primary Class Stream Assignment</label>
         <select id="reg-stream" class="form-control" required style="font-family: inherit;">
+          <option value="">-- Select Grade Level --</option>
           ${['Pre-Primary 1', 'Pre-Primary 2', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7A', 'Grade 8', 'Grade 9'].map(g => `<option value="${g}">${g}</option>`).join('')}
         </select>
+      </div>
+      <div class="form-group">
+        <label>Kenyan CBC Subject Specialization(s)</label>
+        <div id="reg-subjects-container" style="display:flex; flex-wrap:wrap; gap:8px; padding:12px; border:1px solid var(--border); border-radius:4px; background:var(--bg-light);">
+          <span style="color:var(--text-light); font-size:0.85rem;">Select a class stream above to load the official CBC subjects.</span>
+        </div>
       </div>
       <div class="form-group">
         <label for="reg-password">Choose Password</label>
@@ -200,16 +203,49 @@ function bindLoginEvents(container: HTMLElement): void {
       renderLoginPortal(container);
     });
 
+    // Dynamic CBC Subjects Loading
+    const streamSelect = container.querySelector('#reg-stream') as HTMLSelectElement;
+    const subjectsContainer = container.querySelector('#reg-subjects-container') as HTMLElement;
+
+    streamSelect?.addEventListener('change', () => {
+      const val = streamSelect.value;
+      let subjects: string[] = [];
+      if (val.startsWith('Pre') || val === 'Grade 1' || val === 'Grade 2' || val === 'Grade 3') {
+        subjects = ['Mathematics Activities', 'English Language Activities', 'Kiswahili Language Activities', 'Environmental Activities', 'Hygiene and Nutrition Activities', 'CRE / IRE / HRE', 'Movement and Creative Activities'];
+      } else if (val === 'Grade 4' || val === 'Grade 5' || val === 'Grade 6') {
+        subjects = ['Mathematics', 'English', 'Kiswahili', 'Science and Technology', 'Agriculture', 'Home Science', 'Creative Arts', 'Physical and Health Education', 'CRE / IRE / HRE', 'Social Studies'];
+      } else if (val.startsWith('Grade 7') || val === 'Grade 8' || val === 'Grade 9') {
+        subjects = ['English', 'Kiswahili', 'Mathematics', 'Integrated Science', 'Health Education', 'Pre-Technical and Pre-Career Education', 'Social Studies', 'Religious Education', 'Business Studies', 'Agriculture', 'Life Skills Education', 'Sports and Physical Education'];
+      }
+      
+      if (subjects.length > 0) {
+        subjectsContainer.innerHTML = subjects.map(sub => `
+          <label style="display:flex; align-items:center; gap:6px; font-size:0.85rem; font-weight:normal; width:calc(50% - 4px); cursor:pointer;">
+            <input type="checkbox" class="cbc-subject-cb" value="${sub}">
+            ${sub}
+          </label>
+        `).join('');
+      } else {
+        subjectsContainer.innerHTML = '<span style="color:var(--text-light); font-size:0.85rem;">Select a class stream above to load the official CBC subjects.</span>';
+      }
+    });
+
     // Registration Form Submit
     container.querySelector('#teacher-register-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
+
+      const selectedSubjects = Array.from(container.querySelectorAll('.cbc-subject-cb:checked')).map((cb: any) => cb.value);
+      if (selectedSubjects.length === 0) {
+        triggerToastNotification('Missing Subjects', 'Please select at least one teaching subject from the syllabus.', 'warning');
+        return;
+      }
 
       const payload = {
         name: (container.querySelector('#reg-name') as HTMLInputElement).value.trim(),
         email: (container.querySelector('#reg-email') as HTMLInputElement).value.trim(),
         phone: (container.querySelector('#reg-phone') as HTMLInputElement).value.trim(),
-        subject: (container.querySelector('#reg-subject') as HTMLInputElement).value.trim(),
-        stream: (container.querySelector('#reg-stream') as HTMLSelectElement).value,
+        subjects: selectedSubjects,
+        stream: streamSelect.value,
         password: (container.querySelector('#reg-password') as HTMLInputElement).value
       };
 

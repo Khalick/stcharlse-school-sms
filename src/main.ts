@@ -6,6 +6,7 @@ import { renderTeacherPortal } from './components/teacherPortal';
 import { renderStudentPortal } from './components/studentPortal';
 import { renderLoginPortal } from './components/loginPortal';
 import { clearAuthToken } from './data/apiClient';
+import { stopSpeaking } from './lib/audioService';
 
 // Main App Controller
 document.addEventListener('DOMContentLoaded', () => {
@@ -69,6 +70,7 @@ function route(): void {
 
       // Bind Sign Out trigger
       document.getElementById('btn-signout-trigger')?.addEventListener('click', () => {
+        stopSpeaking();
         const currentDb = getDb();
         currentDb.currentUser = null;
         saveDb(currentDb);

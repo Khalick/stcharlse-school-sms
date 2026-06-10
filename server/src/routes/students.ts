@@ -16,6 +16,8 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
         s.id,
         s.name,
         s.stream,
+        s.xp_points,
+        s.current_streak,
         p.name as guardian_name,
         p.phone as guardian_phone,
         p.email as guardian_email,
@@ -34,7 +36,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
       query = sql`${query} WHERE LOWER(s.name) LIKE ${filter} OR LOWER(s.stream) LIKE ${filter} OR LOWER(s.id) LIKE ${filter}`;
     }
 
-    query = sql`${query} GROUP BY s.id, s.name, s.stream, p.name, p.phone, p.email`;
+    query = sql`${query} GROUP BY s.id, s.name, s.stream, s.xp_points, s.current_streak, p.name, p.phone, p.email`;
 
     const students = await query;
 
@@ -46,6 +48,8 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
         id: s.id,
         name: s.name,
         stream: s.stream,
+        xp_points: s.xp_points || 0,
+        current_streak: s.current_streak || 0,
         guardianName: s.guardian_name,
         guardianPhone: s.guardian_phone,
         guardianEmail: s.guardian_email,
@@ -325,6 +329,103 @@ router.put('/:id/password', authenticateToken, async (req: AuthRequest, res: Res
   } catch (error: any) {
     console.error('Error resetting student password:', error);
     res.status(500).json({ error: 'Failed to reset student password: ' + error.message });
+  }
+});
+
+// POST /api/students/:id/xp - Add XP points and update streak
+router.post('/:id/xp', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const { xp } = req.body;
+
+  if (!xp || typeof xp !== 'number') {
+    res.status(400).json({ error: 'Missing or invalid XP value.' });
+    return;
+  }
+
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    
+    const [student] = await sql`
+      SELECT xp_points, current_streak, last_active_date 
+      FROM students WHERE id = ${id}
+    `;
+
+    if (!student) {
+      res.status(404).json({ error: 'Student not found.' });
+      return;
+    }
+
+    let newStreak = student.current_streak || 0;
+    const lastActive = student.last_active_date ? new Date(student.last_active_date).toISOString().split('T')[0] : null;
+
+    if (lastActive !== today) {
+      if (lastActive) {
+        const lastDate = new Date(lastActive);
+        const todayDate = new Date(today);
+        const diffTime = Math.abs(todayDate.getTime() - lastDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+        
+        if (diffDays === 1) {
+          newStreak += 1;
+        } else {
+          newStreak = 1;
+        }
+      } else {
+        newStreak = 1;
+      }
+    }
+
+    const newXp = (student.xp_points || 0) + xp;
+
+    await sql`
+      UPDATE students 
+      SET xp_points = ${newXp}, current_streak = ${newStreak}, last_active_date = ${today}
+      WHERE id = ${id}
+    `;
+
+    res.json({ success: true, xp: newXp, streak: newStreak });
+  } catch (error: any) {
+    console.error('Error updating XP:', error);
+    res.status(500).json({ error: 'Failed to update student XP: ' + error.message });
+  }
+});
+
+// GET /api/students/study-hub/:stream - Get messages for a class stream
+router.get('/study-hub/:stream', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
+  const { stream } = req.params;
+
+  try {
+    const messages = await sql`
+      SELECT * FROM study_hub_messages 
+      WHERE stream = ${stream} 
+      ORDER BY created_at ASC 
+      LIMIT 100
+    `;
+    res.json({ messages });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to load study hub messages.' });
+  }
+});
+
+// POST /api/students/study-hub/:stream - Post a new message
+router.post('/study-hub/:stream', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
+  const { stream } = req.params;
+  const { sender_name, sender_role, message } = req.body;
+
+  if (!sender_name || !message) {
+    res.status(400).json({ error: 'Missing message details.' });
+    return;
+  }
+
+  try {
+    const [newMessage] = await sql`
+      INSERT INTO study_hub_messages (stream, sender_name, sender_role, message)
+      VALUES (${stream}, ${sender_name}, ${sender_role || 'student'}, ${message})
+      RETURNING *
+    `;
+    res.status(201).json({ message: newMessage });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to post message to study hub.' });
   }
 });
 

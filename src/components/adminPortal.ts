@@ -4,8 +4,9 @@ import { renderTeachersTab } from './admin/teachersTab';
 import { renderMaterialsTab } from './admin/materialsTab';
 import { renderTimetableTab } from './admin/timetableTab';
 import { renderRegistersTab } from './admin/registersTab';
+import { renderBoardTab } from './admin/boardTab';
 
-type AdminTab = 'dashboard' | 'students' | 'teachers' | 'materials' | 'timetable' | 'registers';
+type AdminTab = 'dashboard' | 'students' | 'teachers' | 'materials' | 'timetable' | 'registers' | 'board';
 let activeAdminTab: AdminTab = 'dashboard';
 
 export async function renderAdminPortal(container: HTMLElement): Promise<void> {
@@ -19,6 +20,7 @@ export async function renderAdminPortal(container: HTMLElement): Promise<void> {
       <button class="admin-tab-btn ${activeAdminTab === 'materials' ? 'active' : ''}" data-tab="materials">Materials Vault</button>
       <button class="admin-tab-btn ${activeAdminTab === 'timetable' ? 'active' : ''}" data-tab="timetable">Class Timetables</button>
       <button class="admin-tab-btn ${activeAdminTab === 'registers' ? 'active' : ''}" data-tab="registers">Class Registers</button>
+      <button class="admin-tab-btn ${activeAdminTab === 'board' ? 'active' : ''}" data-tab="board">School Board</button>
     </div>
 
     <!-- Active Tab Panel Viewport -->
@@ -55,6 +57,8 @@ export async function renderAdminPortal(container: HTMLElement): Promise<void> {
       await renderTimetableTab(tabPanel);
     } else if (activeAdminTab === 'registers') {
       await renderRegistersTab(tabPanel);
+    } else if (activeAdminTab === 'board') {
+      await renderBoardTab(tabPanel);
     }
   } catch (err: any) {
     console.error(`Error rendering active admin tab (${activeAdminTab}):`, err);
