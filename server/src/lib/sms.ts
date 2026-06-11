@@ -19,6 +19,14 @@ function safeJsonParse(text: string): any {
   }
 }
 
+function formatKenyanPhone(phone: string): string {
+  let cleaned = phone.replace(/[\s\+]/g, '');
+  if (cleaned.startsWith('0')) {
+    cleaned = '254' + cleaned.substring(1);
+  }
+  return cleaned;
+}
+
 export async function sendSms(recipients: string | string[], message: string, options: SendOptions = {}): Promise<SmsOutcome> {
   const provider = (process.env.SMS_PROVIDER || 'onfon').toLowerCase();
 
@@ -49,12 +57,13 @@ export async function sendSms(recipients: string | string[], message: string, op
   }
 
   const recipientArray = Array.isArray(recipients) ? recipients : [recipients];
+  const formattedRecipients = recipientArray.map(formatKenyanPhone);
 
   const requestBody = {
     SenderId: senderId,
     IsUnicode: true,
     IsFlash: false,
-    MessageParameters: recipientArray.map(num => ({
+    MessageParameters: formattedRecipients.map(num => ({
       Number: num,
       Text: message
     })),
