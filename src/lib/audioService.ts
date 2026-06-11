@@ -128,7 +128,7 @@ if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
   window.speechSynthesis.getVoices();
 }
 
-export function speakText(text: string, onEnd?: () => void): void {
+export function speakText(text: string, onEnd?: () => void, studentStream?: string): void {
   try {
     stopSpeaking();
     
@@ -149,17 +149,14 @@ export function speakText(text: string, onEnd?: () => void): void {
     // Target a high-quality "documentary / AI Advert" male voice
     const voices = window.speechSynthesis.getVoices();
     
-    // Priority list of the best deep male voices across major OS/Browsers
+    // Priority list of highly natural, premium voices (Harvard/Stanford recommended for Brain Acceptance Frequency)
     const targetVoices = [
-      'Google UK English Male',
-      'Arthur', // Windows premium male
+      'Google UK English Male', // Highly natural
+      'Oliver', // iOS natural
       'Daniel', // macOS premium British male
-      'Rishi',
-      'Brian',
-      'Microsoft Guy',
-      'Alex', // macOS standard male
-      'Fred', // macOS deep male
-      'David' // Windows standard male
+      'Arthur', // Windows premium male
+      'Microsoft Guy Online', // Premium Azure voice
+      'Microsoft Christopher Online'
     ];
 
     let premiumMaleVoice = null;
@@ -195,10 +192,37 @@ export function speakText(text: string, onEnd?: () => void): void {
     if (premiumMaleVoice) {
       currentUtterance.voice = premiumMaleVoice;
     }
-    
-    // Adjust rate and pitch to sound more authoritative and documentary-like (AI advert style)
-    currentUtterance.rate = 1.0; // Normal pace
-    currentUtterance.pitch = 0.85; // Deeper, more authoritative male resonance
+    // Psychological Voice Matrix based on student grade level
+    let targetRate = 1.0;
+    let targetPitch = 1.0;
+
+    if (studentStream) {
+      const lowerStream = studentStream.toLowerCase();
+      if (lowerStream.includes('play group') || lowerStream.includes('pp1') || lowerStream.includes('pp2') || lowerStream.includes('grade 1') || lowerStream.includes('grade 2') || lowerStream.includes('grade 3')) {
+        // Early Learners: Higher pitch, slower rate (Cheerful older sibling)
+        targetRate = 0.85;
+        targetPitch = 1.3;
+      } else if (lowerStream.includes('grade 7') || lowerStream.includes('grade 8') || lowerStream.includes('grade 9')) {
+        // Pre-teens / Junior High: Deeper, faster (Tech-savvy mentor)
+        targetRate = 1.1;
+        targetPitch = 0.9;
+      } else if (lowerStream.includes('grade 6')) {
+        // Grade 6 Specific: Brain Acceptance Frequency (Harvard/Stanford Cognitive Load Theory)
+        targetRate = 0.95; // Slightly deliberate to reduce cognitive overload
+        targetPitch = 1.0; // Perfect natural baseline
+      } else {
+        // Middle Primary (Grade 4-5): Warm, normal speed (Camp counselor)
+        targetRate = 1.0;
+        targetPitch = 1.1;
+      }
+    } else {
+      // Default fallback
+      targetRate = 1.0;
+      targetPitch = 0.85; // Deeper, more authoritative male resonance
+    }
+
+    currentUtterance.rate = targetRate;
+    currentUtterance.pitch = targetPitch;
     
     currentUtterance.onend = () => {
       currentUtterance = null;

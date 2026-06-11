@@ -1,6 +1,7 @@
 import { apiClient } from '../../data/apiClient';
+import { SCHOOL_STREAMS } from '../../lib/constants';
 
-let selectedStream = 'Grade 7A';
+let selectedStream = 'Grade 6 East';
 let currentWeekStart = getMonday(new Date());
 
 function getMonday(d: Date): Date {
@@ -40,11 +41,7 @@ export async function renderRegistersTab(container: HTMLElement): Promise<void> 
   fridayDate.setDate(currentWeekStart.getDate() + 4);
   const dateHeading = `Week of ${formatDisplayDate(weekStartStr)} — ${formatDisplayDate(formatDateStr(fridayDate))}`;
 
-  const streams = [
-    'Pre-Primary 1', 'Pre-Primary 2',
-    'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6',
-    'Grade 7A', 'Grade 8', 'Grade 9'
-  ];
+  const streams = SCHOOL_STREAMS;
 
   container.innerHTML = `
     <div class="card-header-with-action" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom: 20px;">

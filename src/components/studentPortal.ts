@@ -27,6 +27,7 @@ let generatedQuizMaterialId: string | null = null;
 let studyHubMessages: any[] = [];
 let studyHubPolling: any = null;
 let lastHubStream = '';
+let isGeneratingChat = false;
 
 // Cached data to avoid re-fetching on every internal re-render (quiz click, chat msg etc.)
 let cachedStudents: any[] | null = null;
@@ -161,13 +162,24 @@ export async function renderStudentPortal(container: HTMLElement): Promise<void>
           <p>Student: <strong>${student.name} (${student.id})</strong> | Assigned Class: <strong>${student.stream}</strong></p>
         </div>
         <div class="gamification-widget" style="display: flex; gap: 16px; background: rgba(255,255,255,0.1); padding: 8px 16px; border-radius: 20px;">
-          <div style="text-align: center;" title="Daily Study Streak">
-            <span style="font-size: 1.2rem;">🔥</span><br>
-            <strong style="color: var(--gold-light); font-size: 0.9rem;"><span id="student-streak-display">${student.current_streak || 0}</span> Day Streak</strong>
+          <div class="streak-flame-container" title="Daily Study Streak">
+            <svg class="living-flame" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2C12 2 7 7 7 12C7 14.7614 9.23858 17 12 17C14.7614 17 17 14.7614 17 12C17 9 14 7 14 7C14 7 16 9 16 12C16 14.2091 14.2091 16 12 16C9.79086 16 8 14.2091 8 12C8 8.5 12 4 12 4Z" fill="#FFA500"/>
+              <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.5 12 2 12 2C12 2 2 6.5 2 12C2 17.5228 6.47715 22 12 22ZM12 20C7.58172 20 4 16.4183 4 12C4 7.5 12 4.5 12 4.5C12 4.5 20 7.5 20 12C20 16.4183 16.4183 20 12 20Z" fill="url(#flameGradient)"/>
+              <defs>
+                <linearGradient id="flameGradient" x1="12" y1="2" x2="12" y2="22" gradientUnits="userSpaceOnUse">
+                  <stop stop-color="#FFD700"/>
+                  <stop offset="1" stop-color="#FF4500"/>
+                </linearGradient>
+              </defs>
+            </svg>
+            <div style="display:flex; flex-direction:column; align-items:flex-start;">
+              <strong style="color: var(--gold-light); font-size: 0.95rem; line-height: 1;"><span id="student-streak-display">${student.current_streak || 0}</span> Day Streak</strong>
+            </div>
           </div>
-          <div style="text-align: center;" title="Total Experience Points">
-            <span style="font-size: 1.2rem;">⭐</span><br>
-            <strong style="color: var(--gold-light); font-size: 0.9rem;"><span id="student-xp-display">${student.xp_points || 0}</span> XP</strong>
+          <div style="text-align: center; display:flex; align-items:center; gap:6px; background: rgba(255, 255, 255, 0.1); border-radius: 20px; padding: 4px 12px;" title="Total Experience Points">
+            <span style="font-size: 1.2rem;">⭐</span>
+            <strong style="color: #fff; font-size: 0.9rem;"><span id="student-xp-display">${student.xp_points || 0}</span> XP</strong>
           </div>
         </div>
       </div>
@@ -211,10 +223,14 @@ export async function renderStudentPortal(container: HTMLElement): Promise<void>
           <!-- Charlie Chat Hub -->
           <section class="ai-tutor-container">
             <div class="ai-tutor-header">
-              <div class="ai-avatar" style="font-weight: bold; background: var(--crimson); color: white; display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 50%;">AI</div>
+              <div class="ai-avatar ${isGeneratingChat ? 'thinking' : ''} ${isTtsActive ? 'speaking' : ''}">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM15.5 9.5C16.33 9.5 17 10.17 17 11C17 11.83 16.33 12.5 15.5 12.5C14.67 12.5 14 11.83 14 11C14 10.17 14.67 9.5 15.5 9.5ZM8.5 9.5C9.33 9.5 10 10.17 10 11C10 11.83 9.33 12.5 8.5 12.5C7.67 12.5 7 11.83 7 11C7 10.17 7.67 9.5 8.5 9.5ZM12 17.5C9.67 17.5 7.68 16.04 6.8 14H17.2C16.32 16.04 14.33 17.5 12 17.5Z" fill="white"/>
+                </svg>
+              </div>
               <div class="ai-header-text">
                 <h3>Charlie AI Companion</h3>
-                <p><span class="online-dot"></span> Ready to teach you</p>
+                <p><span class="online-dot"></span> Active & Ready</p>
               </div>
             </div>
             
@@ -222,19 +238,29 @@ export async function renderStudentPortal(container: HTMLElement): Promise<void>
               ${chatHistory[chatKey].map((msg, index) => `
                 <div class="chat-bubble ${msg.sender}">
                   ${renderParsedMarkdown(msg.text)}
-                  ${msg.sender === 'assistant' ? `<span class="chat-tts-icon" data-msg-idx="${index}" title="Listen to response" style="cursor: pointer; opacity: 0.6; font-size: 0.75rem; margin-top: 4px; display: inline-block; border: 1px solid var(--border); padding: 2px 6px; border-radius: 4px; background: white;">Listen</span>` : ''}
+                  ${msg.sender === 'assistant' ? `
+                    <div class="chat-tts-icon" data-msg-idx="${index}" title="Listen to response">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M3 9V15H7L12 20V4L7 9H3ZM16.5 12C16.5 10.23 15.48 8.71 14 7.97V16.02C15.48 15.29 16.5 13.77 16.5 12ZM14 3.23V5.29C16.89 6.15 19 8.83 19 12C19 15.17 16.89 17.85 14 18.71V20.77C18.01 19.86 21 16.28 21 12C21 7.72 18.01 4.14 14 3.23Z"/></svg>
+                    </div>` : ''}
                 </div>
               `).join('')}
+              ${isGeneratingChat ? `
+                <div class="chat-bubble assistant" id="chat-typing-indicator" style="max-width: 60px;">
+                  <div class="typing-indicator">
+                    <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
+                  </div>
+                </div>
+              ` : ''}
             </div>
 
             <!-- Chat inputs -->
             <div class="chat-input-bar">
-              <button class="chat-mic-btn ${isVoiceModeActive ? 'recording' : ''}" id="btn-voice-mode" title="Toggle Hands-Free Voice Mode" style="font-size: 0.8rem; font-weight: 500; background: ${isVoiceModeActive ? 'var(--crimson)' : 'transparent'}; color: ${isVoiceModeActive ? 'white' : 'inherit'}; border: 1px solid var(--border);">
-                ${isVoiceModeActive ? 'Stop Voice Mode' : 'Start Voice Mode'}
+              <button class="chat-btn-circle chat-mic-btn ${isVoiceModeActive ? 'recording' : ''}" id="btn-voice-mode" title="Toggle Hands-Free Voice Mode">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14C13.66 14 15 12.66 15 11V5C15 3.34 13.66 2 12 2C10.34 2 9 3.34 9 5V11C9 12.66 10.34 14 12 14ZM17 11C17 13.76 14.76 16 12 16C9.24 16 7 13.76 7 11H5C5 14.53 7.61 17.43 11 17.92V21H13V17.92C16.39 17.43 19 14.53 19 11H17Z"/></svg>
               </button>
-              <input type="text" id="chat-text-input" class="form-control" placeholder="Ask Charlie a question..." style="border-radius: 20px;">
-              <button class="btn-primary" id="btn-chat-send" style="border-radius: 20px; padding: 10px 16px;">
-                Send
+              <input type="text" id="chat-text-input" class="chat-input-pill" placeholder="Ask Charlie a question...">
+              <button class="chat-btn-circle chat-btn-send" id="btn-chat-send" title="Send message">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
               </button>
             </div>
           </section>
@@ -380,8 +406,10 @@ function resetQuizState(): void {
 }
 
 function bindStudentEvents(container: HTMLElement, allStudents: any[], studentMaterials: StudyMaterial[]): void {
-  // Process any dynamic AI image placeholders generated in this render
-  processImagePlaceholders(container);
+  // Only process dynamic AI image placeholders when Charlie has completely finished streaming his response
+  if (!isGeneratingChat) {
+    processImagePlaceholders(container);
+  }
 
   // Select active Student
   const select = container.querySelector('#student-select') as HTMLSelectElement;
@@ -437,14 +465,15 @@ function bindStudentEvents(container: HTMLElement, allStudents: any[], studentMa
       renderStudentPortal(container);
     } else {
       const material = studentMaterials.find(m => m.id === activeMaterialId);
-      if (material) {
+      const student = allStudents.find(s => s.id === activeStudentId) || allStudents[0];
+      if (material && student) {
         isTtsActive = true;
         renderStudentPortal(container);
         
         speakText(material.content, () => {
           isTtsActive = false;
           renderStudentPortal(container);
-        });
+        }, student.stream);
       }
     }
   });
@@ -466,14 +495,23 @@ function bindStudentEvents(container: HTMLElement, allStudents: any[], studentMa
     
     // Push user message
     chatHistory[chatKey].push({ sender: 'user', text: query });
+    
+    // Create empty assistant message for streaming
+    const assistantMsgIndex = chatHistory[chatKey].push({ sender: 'assistant', text: '' }) - 1;
+    isGeneratingChat = true;
     renderStudentPortal(container);
     
-    // Generate AI tutor response (client-side simulation)
-    const reply = await generateAiResponse(query, material, student);
-    chatHistory[chatKey].push({ sender: 'assistant', text: reply });
+    // Generate AI tutor response (streamed)
+    const reply = await generateAiResponse(query, material, student, (chunkText) => {
+      chatHistory[chatKey][assistantMsgIndex].text = chunkText;
+      renderStudentPortal(container);
+    });
     
-    // Auto speak response
-    speakText(reply);
+    isGeneratingChat = false;
+    chatHistory[chatKey][assistantMsgIndex].text = reply;
+    
+    // Opt-In UX: Voice auto-play removed to prevent cognitive overload.
+    // Students must click the 'Listen' icon manually.
     
     renderStudentPortal(container);
   };
@@ -495,7 +533,7 @@ function bindStudentEvents(container: HTMLElement, allStudents: any[], studentMa
       
       const text = chatHistory[chatKey][msgIdx]?.text;
       if (text) {
-        speakText(text);
+        speakText(text, undefined, student.stream);
       }
     });
   });
@@ -663,8 +701,18 @@ function toggleVoiceMode(container: HTMLElement, allStudents: any[], studentMate
         renderStudentPortal(container);
 
         try {
-          const reply = await generateAiResponse(transcript, material, student);
-          chatHistory[chatKey].push({ sender: 'assistant', text: reply });
+          // Create empty assistant message for streaming
+          const assistantMsgIndex = chatHistory[chatKey].push({ sender: 'assistant', text: '' }) - 1;
+          isGeneratingChat = true;
+          renderStudentPortal(container);
+          
+          const reply = await generateAiResponse(transcript, material, student, (chunkText) => {
+            chatHistory[chatKey][assistantMsgIndex].text = chunkText;
+            renderStudentPortal(container);
+          });
+          
+          isGeneratingChat = false;
+          chatHistory[chatKey][assistantMsgIndex].text = reply;
           renderStudentPortal(container);
           
           // Speak it back, and resume listening when done
@@ -674,7 +722,7 @@ function toggleVoiceMode(container: HTMLElement, allStudents: any[], studentMate
             if (isVoiceModeActive && recognitionInstance) {
               try { recognitionInstance.start(); } catch(e) {}
             }
-          });
+          }, student.stream);
         } catch (e) {
           console.error(e);
           // Resume if failed
@@ -723,15 +771,52 @@ async function processImagePlaceholders(container: HTMLElement) {
     try {
       const { apiClient } = await import('../data/apiClient');
       const res: any = await apiClient.post('/ai/generate-image', { prompt });
+      
+      const img = document.createElement('img');
+      img.alt = prompt;
+      img.style.maxWidth = '100%';
+      img.style.borderRadius = '8px';
+      img.style.marginTop = '8px';
+      img.style.marginBottom = '8px';
+      img.style.display = 'block';
+      
+      const handleError = () => {
+        const fallback = document.createElement('div');
+        fallback.style.padding = '40px 20px';
+        fallback.style.borderRadius = '12px';
+        fallback.style.background = '#f8fafc';
+        fallback.style.textAlign = 'center';
+        fallback.style.border = '1px dashed #cbd5e1';
+        fallback.style.margin = '12px 0';
+        fallback.innerHTML = '<div style="font-size:2rem; margin-bottom:8px;">🖼️</div><p style="font-size:0.85rem; color:#64748b; margin:0;">Image generation temporarily unavailable.</p>';
+        if (img.parentNode) {
+          img.parentNode.replaceChild(fallback, img);
+        } else if (el.parentNode) {
+           el.parentNode.replaceChild(fallback, el);
+        }
+      };
+      
+      img.onerror = handleError;
+      
       if (res.base64) {
-        el.outerHTML = `<img src="data:image/png;base64,${res.base64}" alt="${prompt}" style="max-width:100%; border-radius:8px; margin-top:8px; margin-bottom:8px; display:block;">`;
+        img.src = `data:image/png;base64,${res.base64}`;
+        el.replaceWith(img);
       } else if (res.url) {
-        el.outerHTML = `<img src="${res.url}" alt="${prompt}" style="max-width:100%; border-radius:8px; margin-top:8px; margin-bottom:8px; display:block;">`;
+        img.src = res.url;
+        el.replaceWith(img);
       } else {
-        el.innerHTML = `<p style="color:var(--danger); font-size:0.8rem;">Failed to load image.</p>`;
+        handleError();
       }
     } catch (err) {
-      el.innerHTML = `<p style="color:var(--danger); font-size:0.8rem;">Image generation failed.</p>`;
+      const fallback = document.createElement('div');
+      fallback.style.padding = '40px 20px';
+      fallback.style.borderRadius = '12px';
+      fallback.style.background = '#f8fafc';
+      fallback.style.textAlign = 'center';
+      fallback.style.border = '1px dashed #cbd5e1';
+      fallback.style.margin = '12px 0';
+      fallback.innerHTML = '<div style="font-size:2rem; margin-bottom:8px;">🖼️</div><p style="font-size:0.85rem; color:#64748b; margin:0;">Image generation failed.</p>';
+      el.replaceWith(fallback);
     }
   });
 }

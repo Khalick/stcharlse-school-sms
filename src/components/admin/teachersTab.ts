@@ -1,8 +1,7 @@
 import { triggerToastNotification } from '../simulatorBar';
 import { apiClient } from '../../data/apiClient';
 import { showPasswordModal, showConfirm } from './studentsTab';
-
-const STREAMS = ['Pre-Primary 1', 'Pre-Primary 2', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7A', 'Grade 8', 'Grade 9'];
+import { SCHOOL_STREAMS as STREAMS } from '../../lib/constants';
 
 export async function renderTeachersTab(container: HTMLElement): Promise<void> {
   const teachers = await apiClient.get<any[]>('/teachers');

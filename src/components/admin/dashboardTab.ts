@@ -2,6 +2,7 @@ import { getDb } from '../../data/mockDb';
 import { triggerToastNotification } from '../simulatorBar';
 import { playWarningChime } from '../../lib/audioService';
 import { apiClient } from '../../data/apiClient';
+import { SCHOOL_STREAMS } from '../../lib/constants';
 
 export async function renderDashboardTab(container: HTMLElement): Promise<void> {
   const db = getDb();
@@ -55,7 +56,7 @@ export async function renderDashboardTab(container: HTMLElement): Promise<void> 
           <div class="form-group" id="group-grade-select" style="display:none;">
             <label for="broadcast-grade-select">Select Grade Level</label>
             <select id="broadcast-grade-select" class="form-control" style="font-family: inherit;">
-              ${['Pre-Primary 1', 'Pre-Primary 2', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7A', 'Grade 8', 'Grade 9'].map(g => `<option value="${g}">${g}</option>`).join('')}
+              ${SCHOOL_STREAMS.map(g => `<option value="${g}">${g}</option>`).join('')}
             </select>
           </div>
 
@@ -63,7 +64,7 @@ export async function renderDashboardTab(container: HTMLElement): Promise<void> 
             <div style="display:flex; gap:8px; margin-bottom:8px;">
               <select id="filter-student-grade" class="form-control" style="font-family: inherit; flex:1;">
                 <option value="All">All Grades (Filter)</option>
-                ${['Pre-Primary 1', 'Pre-Primary 2', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7A', 'Grade 8', 'Grade 9'].map(g => `<option value="${g}">${g}</option>`).join('')}
+                ${SCHOOL_STREAMS.map(g => `<option value="${g}">${g}</option>`).join('')}
               </select>
               <input type="text" id="filter-student-search" class="form-control" placeholder="Search student or parent..." style="flex:1;">
             </div>

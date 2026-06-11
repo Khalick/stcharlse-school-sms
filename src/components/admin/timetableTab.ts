@@ -1,6 +1,7 @@
 import { triggerToastNotification } from '../simulatorBar';
 import { apiClient } from '../../data/apiClient';
 import { showConfirm } from './studentsTab';
+import { SCHOOL_STREAMS } from '../../lib/constants';
 
 let currentTimetableFilter = 'All Streams';
 
@@ -140,7 +141,7 @@ function showEventModal(container: HTMLElement, event: any | null, teachers: any
             <div class="form-group">
               <label for="ef-stream">Class Stream</label>
               <select id="ef-stream" class="form-control" required style="font-family: inherit;">
-                ${['Pre-Primary 1', 'Pre-Primary 2', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7A', 'Grade 8', 'Grade 9'].map(g => `<option value="${g}" ${event?.stream === g ? 'selected' : ''}>${g}</option>`).join('')}
+                ${SCHOOL_STREAMS.map(g => `<option value="${g}" ${event?.stream === g ? 'selected' : ''}>${g}</option>`).join('')}
               </select>
             </div>
             <div class="form-group">
@@ -393,7 +394,7 @@ function renderReviewScreen(
               </td>
               <td>
                 <select class="rev-stream">
-                  ${['Pre-Primary 1', 'Pre-Primary 2', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7A', 'Grade 8', 'Grade 9'].map(g => `<option value="${g}" ${ev.stream === g ? 'selected' : ''}>${g}</option>`).join('')}
+                  ${SCHOOL_STREAMS.map(g => `<option value="${g}" ${ev.stream === g ? 'selected' : ''}>${g}</option>`).join('')}
                 </select>
               </td>
               <td>

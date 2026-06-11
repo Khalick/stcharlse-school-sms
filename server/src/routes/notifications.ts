@@ -129,7 +129,7 @@ router.get('/cron-timetable', async (req, res): Promise<void> => {
     }
 
     // 4. Dispatch SMS
-    const results = [];
+    const results: any[] = [];
     for (const ev of upcomingEvents) {
       if (!ev.teacher_phone) continue;
 

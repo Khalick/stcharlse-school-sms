@@ -3,6 +3,7 @@ import type { SessionUser } from '../data/mockDb';
 import { triggerToastNotification } from './simulatorBar';
 import { playWarningChime, triggerHapticVibration } from '../lib/audioService';
 import { apiClient, setAuthToken } from '../data/apiClient';
+import { SCHOOL_STREAMS } from '../lib/constants';
 
 let activeLoginTab: 'student' | 'teacher' | 'admin' = 'student';
 let isTeacherRegistering = false;
@@ -132,7 +133,7 @@ function renderTeacherRegistrationForm(): string {
         <label for="reg-stream">Primary Class Stream Assignment</label>
         <select id="reg-stream" class="form-control" required style="font-family: inherit;">
           <option value="">-- Select Grade Level --</option>
-          ${['Pre-Primary 1', 'Pre-Primary 2', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7A', 'Grade 8', 'Grade 9'].map(g => `<option value="${g}">${g}</option>`).join('')}
+          ${SCHOOL_STREAMS.map(g => `<option value="${g}">${g}</option>`).join('')}
         </select>
       </div>
       <div class="form-group">
@@ -210,7 +211,7 @@ function bindLoginEvents(container: HTMLElement): void {
     streamSelect?.addEventListener('change', () => {
       const val = streamSelect.value;
       let subjects: string[] = [];
-      if (val.startsWith('Pre') || val === 'Grade 1' || val === 'Grade 2' || val === 'Grade 3') {
+      if (val.includes('Play Group') || val.includes('PP1') || val.includes('PP2') || val.includes('Grade 1') || val.includes('Grade 2') || val.includes('Grade 3')) {
         subjects = ['Mathematics Activities', 'English Language Activities', 'Kiswahili Language Activities', 'Environmental Activities', 'Hygiene and Nutrition Activities', 'CRE / IRE / HRE', 'Movement and Creative Activities'];
       } else if (val === 'Grade 4' || val === 'Grade 5' || val === 'Grade 6') {
         subjects = ['Mathematics', 'English', 'Kiswahili', 'Science and Technology', 'Agriculture', 'Home Science', 'Creative Arts', 'Physical and Health Education', 'CRE / IRE / HRE', 'Social Studies'];

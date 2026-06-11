@@ -1,4 +1,5 @@
 import { triggerToastNotification } from '../simulatorBar';
+import { SCHOOL_STREAMS } from '../../lib/constants';
 import { apiClient } from '../../data/apiClient';
 import { getDb } from '../../data/mockDb';
 
@@ -129,7 +130,7 @@ function showStudentModal(container: HTMLElement, student: any | null, streamFil
   const isEdit = !!student;
   const db = getDb();
   const isTeacher = db.currentUser?.role === 'teacher';
-  const defaultStream = streamFilter || db.currentUser?.stream || 'Grade 7A';
+  const defaultStream = streamFilter || db.currentUser?.stream || 'Grade 6 East';
 
   mc.innerHTML = `<div class="modal-overlay"><div class="modal-content">
     <div class="modal-header"><h3>${isEdit ? 'Edit Student' : 'Register New Student'}</h3><button class="modal-close-btn" id="close-stu-modal">×</button></div>
@@ -137,7 +138,7 @@ function showStudentModal(container: HTMLElement, student: any | null, streamFil
       <div class="form-group"><label>Admission Number (ID)</label><input type="text" id="sf-id" class="form-control" value="${student?.id || ''}" placeholder="e.g. S001" required ${isEdit ? 'disabled' : ''}></div>
       <div class="form-group"><label>Student Name</label><input type="text" id="sf-name" class="form-control" value="${student?.name || ''}" required></div>
       <div class="form-group"><label>Class Stream</label><select id="sf-stream" class="form-control" required ${isTeacher ? 'disabled' : ''}>
-        ${['Pre-Primary 1', 'Pre-Primary 2', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7A', 'Grade 8', 'Grade 9'].map(g => `<option value="${g}" ${student?.stream === g ? 'selected' : (defaultStream === g ? 'selected' : '')}>${g}</option>`).join('')}
+        ${SCHOOL_STREAMS.map(g => `<option value="${g}" ${student?.stream === g ? 'selected' : (defaultStream === g ? 'selected' : '')}>${g}</option>`).join('')}
       </select></div>
       <div class="form-group"><label>Guardian Name</label><input type="text" id="sf-gname" class="form-control" value="${student?.guardianName || ''}" required></div>
       <div class="form-group"><label>Guardian Phone</label><input type="tel" id="sf-gphone" class="form-control" value="${student?.guardianPhone || '+254 '}" required></div>

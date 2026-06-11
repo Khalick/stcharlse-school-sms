@@ -13,9 +13,8 @@ async function seed() {
 
     // 1. Seed Teachers
     const teachersData = [
-      { id: 'T001', name: 'Teacher Agnes', email: 'agnes.w@stcharles.sc.ke', phone: '+254 721 111222', password: 'teacher123' },
-      { id: 'T002', name: 'Teacher Mark', email: 'mark.o@stcharles.sc.ke', phone: '+254 722 333444', password: 'teacher123' },
-      { id: 'T003', name: 'Teacher Beatrice', email: 'beatrice.k@stcharles.sc.ke', phone: '+254 723 555666', password: 'teacher123' }
+      { id: 'T001', name: 'Teacher Agnes', email: 'agnes.w@stcharles.sc.ke', phone: '+254 712 333444', subject: 'Science', stream: 'Grade 6 East', password: 'teacher123', approved: true },
+      { id: 'T002', name: 'Teacher Beatrice', email: 'beatrice@stcharles.sc.ke', phone: '+254 722 555666', subject: 'Pre-Technical and Pre-Career Education', stream: 'Grade 9 Nelion Nelion', password: 'teacher123', approved: true }
     ];
 
     for (const t of teachersData) {
@@ -28,9 +27,9 @@ async function seed() {
 
     // 2. Seed Classes
     const classesData = [
-      { name: 'Grade 7A', classTeacherId: 'T001' },
-      { name: 'Grade 8', classTeacherId: 'T002' },
-      { name: 'Grade 9', classTeacherId: 'T003' }
+      { name: 'Grade 7 Batian', classTeacherId: 'T001' },
+      { name: 'Grade 8 Lenana', classTeacherId: 'T002' },
+      { name: 'Grade 9 Nelion', classTeacherId: null }
     ];
 
     for (const c of classesData) {
@@ -42,10 +41,10 @@ async function seed() {
 
     // 3. Seed Class Subjects
     const classSubjectsData = [
-      { className: 'Grade 7A', subjectName: 'Science', teacherId: 'T001' },
-      { className: 'Grade 7A', subjectName: 'Kiswahili', teacherId: 'T002' },
-      { className: 'Grade 8', subjectName: 'English', teacherId: 'T002' },
-      { className: 'Grade 9', subjectName: 'Pre-Tech', teacherId: 'T003' }
+      { className: 'Grade 7 Batian', subjectName: 'Science', teacherId: 'T001' },
+      { className: 'Grade 7 Batian', subjectName: 'Kiswahili', teacherId: 'T002' },
+      { className: 'Grade 8 Lenana', subjectName: 'English', teacherId: 'T002' },
+      { className: 'Grade 9 Nelion', subjectName: 'Pre-Tech', teacherId: 'T002' }
     ];
 
     for (const cs of classSubjectsData) {
@@ -76,13 +75,13 @@ async function seed() {
 
     // 5. Seed Students
     const studentsData = [
-      { id: 'S001', name: 'David Kamau', stream: 'Grade 7A', parentId: 'P001', password: 'student123' },
-      { id: 'S002', name: 'Joseph Njoroge', stream: 'Grade 7A', parentId: 'P002', password: 'student123' },
-      { id: 'S003', name: 'Alice Wambui', stream: 'Grade 7A', parentId: 'P003', password: 'student123' },
-      { id: 'S004', name: 'Brian Omondi', stream: 'Grade 8', parentId: 'P004', password: 'student123' },
-      { id: 'S005', name: 'Grace Mutua', stream: 'Grade 8', parentId: 'P005', password: 'student123' },
-      { id: 'S006', name: 'Kevin Kiprop', stream: 'Grade 9', parentId: 'P006', password: 'student123' },
-      { id: 'S007', name: 'Mercy Chebet', stream: 'Grade 9', parentId: 'P007', password: 'student123' }
+      { id: 'S001', name: 'David Kamau', stream: 'Grade 6 East', parentId: 'P001', password: 'student123' },
+      { id: 'S002', name: 'Joseph Njoroge', stream: 'Grade 6 East', parentId: 'P002', password: 'student123' },
+      { id: 'S003', name: 'Alice Wambui', stream: 'Grade 6 East', parentId: 'P003', password: 'student123' },
+      { id: 'S004', name: 'Brian Omondi', stream: 'Grade 7 Batian', parentId: 'P004', password: 'student123' },
+      { id: 'S005', name: 'Grace Mutua', stream: 'Grade 8 Lenana Lenana', parentId: 'P005', password: 'student123' },
+      { id: 'S006', name: 'Kevin Kiprop', stream: 'Grade 9 Nelion Nelion', parentId: 'P006', password: 'student123' },
+      { id: 'S007', name: 'Mercy Chebet', stream: 'Grade 9 Nelion Batian', parentId: 'P007', password: 'student123' }
     ];
 
     for (const s of studentsData) {
@@ -99,7 +98,7 @@ async function seed() {
         id: 'M001',
         title: 'Biology: The Human Digestive System',
         subject: 'Science',
-        grade: 'Grade 7A',
+        grade: 'Grade 7 Batian',
         authorId: 'T001',
         content: `### Biology Lesson: The Human Digestive System
 The human digestive system consists of the gastrointestinal tract plus the accessory organs of digestion (the tongue, salivary glands, pancreas, liver, and gallbladder). Digestion involves the breakdown of food into smaller and smaller components, until they can be absorbed and assimilated into the body.
@@ -123,8 +122,8 @@ Most digestion and nutrient absorption happens in the small intestine. The large
         id: 'M002',
         title: 'Pre-Tech: Basic Hand Tools & Safety',
         subject: 'Pre-Tech',
-        grade: 'Grade 9',
-        authorId: 'T003',
+        grade: 'Grade 9 Nelion',
+        authorId: 'T002',
         content: `### Pre-Technical Studies: Hand Tools and Workshop Safety
 Hand tools are instruments operated by hand rather than a motor. Knowing how to use them safely is key to preventing accidents in the workshop.
 
@@ -144,7 +143,7 @@ Hand tools are instruments operated by hand rather than a motor. Knowing how to 
         id: 'M003',
         title: 'English: Narrative Essay Writing Structure',
         subject: 'English',
-        grade: 'Grade 8',
+        grade: 'Grade 8 Lenana',
         authorId: 'T002',
         content: `### English Composition: Narrative Essay Writing
 A narrative essay tells a story, usually from the writer's perspective. It must have a clear purpose and follow a logical progression of events.
@@ -173,11 +172,11 @@ A narrative essay tells a story, usually from the writer's perspective. It must 
 
     // 7. Seed Timetable Events
     const timetableData = [
-      { id: 'E001', teacherId: 'T003', subject: 'Pre-Tech', stream: 'Grade 9', startTime: 495, endTime: 540, room: 'Room 5 (Workshop)' },
-      { id: 'E002', teacherId: 'T001', subject: 'Science', stream: 'Grade 7A', startTime: 600, endTime: 645, room: 'Room 4 (Lab)' },
-      { id: 'E003', teacherId: 'T002', subject: 'English', stream: 'Grade 8', startTime: 660, endTime: 705, room: 'Room 2' },
-      { id: 'E004', teacherId: 'T002', subject: 'Kiswahili', stream: 'Grade 7A', startTime: 840, endTime: 885, room: 'Room 4' },
-      { id: 'E005', teacherId: 'T001', subject: 'Science', stream: 'Grade 7A', startTime: 915, endTime: 960, room: 'Room 4' }
+      { id: 'E001', teacherId: 'T002', subject: 'Pre-Tech', stream: 'Grade 9 Nelion', startTime: 495, endTime: 540, room: 'Room 5 (Workshop)' },
+      { id: 'E002', teacherId: 'T001', subject: 'Science', stream: 'Grade 7 Batian', startTime: 600, endTime: 645, room: 'Room 4 (Lab)' },
+      { id: 'E006', teacherId: 'T002', subject: 'English', stream: 'Grade 9 Nelion Nelion', startTime: 660, endTime: 705, room: 'Room 6' },
+      { id: 'E007', teacherId: 'T002', subject: 'Pre-Technical and Pre-Career Education', stream: 'Grade 9 Nelion Nelion', startTime: 705, endTime: 750, room: 'Workshop 1' },
+      { id: 'E005', teacherId: 'T001', subject: 'Science', stream: 'Grade 7 Batian', startTime: 915, endTime: 960, room: 'Room 4' }
     ];
 
     for (const ev of timetableData) {

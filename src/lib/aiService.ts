@@ -1,5 +1,5 @@
 import type { StudyMaterial, Student } from '../data/mockDb';
-import { apiClient } from '../data/apiClient';
+
 
 export interface QuizQuestion {
   question: string;
@@ -129,11 +129,52 @@ export function getQuizForMaterial(material: StudyMaterial): QuizQuestion[] {
 export async function generateAiResponse(
   query: string, 
   material: StudyMaterial, 
-  student: Student
+  student: Student,
+  onChunk?: (text: string) => void
 ): Promise<string> {
   try {
-    const data = await apiClient.post<{ response: string }>('/ai/chat', { query, materialId: material.id });
-    return data.response;
+    const token = localStorage.getItem('school_sms_token');
+    const response = await fetch('/api/ai/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ query, materialId: material.id })
+    });
+
+    if (!response.ok) {
+      throw new Error('API Error');
+    }
+
+    if (!response.body) throw new Error('No body');
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let fullText = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      const chunk = decoder.decode(value, { stream: true });
+      const lines = chunk.split('\n');
+      
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const dataStr = line.slice(6);
+          if (dataStr === '[DONE]') break;
+          try {
+            const dataObj = JSON.parse(dataStr);
+            if (dataObj.text) {
+              fullText += dataObj.text;
+              if (onChunk) onChunk(fullText);
+            }
+          } catch (e) {}
+        }
+      }
+    }
+    return fullText;
   } catch (error) {
     console.warn('Charlie AI live API query failed, falling back to mock response:', error);
     return new Promise((resolve) => {

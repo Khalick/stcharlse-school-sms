@@ -116,23 +116,20 @@ CREATE INDEX idx_comm_logs_created ON comm_logs (created_at DESC);
 
 -- Seed Teachers
 INSERT INTO teachers (id, name, email, phone, subject, stream, password, approved) VALUES
-('T001', 'Agnes Walter', 'agnes.w@stcharles.sc.ke', '+254 712 333444', 'Science', 'Grade 7A', 'teacher123', true),
-('T002', 'Beatrice Rotich', 'beatrice.r@stcharles.sc.ke', '+254 722 555666', 'Pre-Technical Studies', 'Grade 8', 'teacher123', true),
-('T003', 'Mark Njuguna', 'mark.n@stcharles.sc.ke', '+254 733 777888', 'English Narrative Writing', 'Grade 9', 'teacher123', true);
+('T001', 'Agnes Walter', 'agnes.w@stcharles.sc.ke', '+254 712 333444', 'Science', 'Grade 6 East', 'teacher123', true);
 
 -- Seed Students
 INSERT INTO students (id, name, stream, guardian_name, guardian_phone, guardian_email, password) VALUES
-('S001', 'David Kamau', 'Grade 7A', 'James Kamau', '+254 712 345678', 'james.kamau@email.com', 'student123'),
-('S002', 'Joseph Njoroge', 'Grade 7A', 'Peter Njoroge', '+254 722 987654', 'peter.njo@email.com', 'student123'),
-('S003', 'Alice Wambui', 'Grade 7A', 'Mary Wambui', '+254 733 111222', 'mary.wambui@email.com', 'student123'),
-('S004', 'Brian Omondi', 'Grade 8', 'Sarah Omondi', '+254 701 444555', 'sarah.omo@email.com', 'student123'),
-('S005', 'Grace Mutua', 'Grade 8', 'John Mutua', '+254 705 666777', 'john.mutua@email.com', 'student123'),
-('S006', 'Kevin Kiprop', 'Grade 9', 'Paul Kiprop', '+254 720 888999', 'paul.kip@email.com', 'student123'),
-('S007', 'Mercy Chebet', 'Grade 9', 'Jane Chebet', '+254 715 000111', 'jane.chebet@email.com', 'student123');
+('S001', 'David Kamau', 'Grade 6 East', 'James Kamau', '+254 712 345678', 'james.kamau@email.com', 'student123'),
+('S002', 'Joseph Njoroge', 'Grade 6 East', 'Peter Njoroge', '+254 722 987654', 'peter.njo@email.com', 'student123'),
+('S003', 'Alice Wambui', 'Grade 6 East', 'Mary Wambui', '+254 733 111222', 'mary.wambui@email.com', 'student123'),
+('S004', 'Grace Mutuku', 'Grade 7 Batian', 'John Mutuku', '+254 700 111222', 'john.mutuku@email.com', 'student123'),
+('S005', 'Kevin Ochieng', 'Grade 8 Lenana', 'Sarah Ochieng', '+254 711 222333', 'sarah.ochieng@email.com', 'student123'),
+('S006', 'Faith Wanjiku', 'Grade 9 Nelion', 'Mercy Wanjiku', '+254 722 333444', 'mercy.w@email.com', 'student123');
 
 -- Seed Study Materials
 INSERT INTO study_materials (id, title, subject, grade, author_id, content) VALUES
-('M001', 'Biology: The Human Digestive System', 'Science', 'Grade 7A', 'T001', '### Biology Lesson: The Human Digestive System
+('M001', 'Biology: The Human Digestive System', 'Science', 'Grade 6 East', 'T001', '### Biology Lesson: The Human Digestive System
 
 The human digestive system consists of the gastrointestinal tract plus the accessory organs of digestion (the tongue, salivary glands, pancreas, liver, and gallbladder). Digestion involves the breakdown of food into smaller and smaller components, until they can be absorbed and assimilated into the body.
 
@@ -147,44 +144,12 @@ The human digestive system consists of the gastrointestinal tract plus the acces
 
 #### 3. Small and Large Intestines
 - Small Intestine: Primary site for nutrient absorption. Highly folded Villi increase surface area.
-- Large Intestine: Absorbs remaining water and salts, consolidating waste.'),
-
-('M002', 'Workshop Safety & Core Hand Tools', 'Pre-Technical Studies', 'Grade 8', 'T002', '### Pre-Tech Lesson: Workshop Safety & Hand Tools
-
-Safety is the absolute primary rule in any technical workshop. Hand tools allow us to shape, cut, and join materials, but must be respected and maintained.
-
-#### 1. Workshop Safety Regulations
-- **Rule 1**: Always wear Personal Protective Equipment (PPE) including safety goggles, aprons, and closed heavy-duty leather boots.
-- **Rule 2**: Keep the workspace and pathways clear of oil spills or sawdust accumulation.
-- **Rule 3**: Never use cracked, rusty, or damaged handles. Report broken tools to Teacher Beatrice.
-
-#### 2. Core Technical Hand Tools
-- **Hammers**: Claw hammers are used for driving and drawing nails. Never swing if the hammer head feels loose!
-- **Screwdrivers**: Flathead and Phillips-head. Match the tool tip to the screw slot perfectly to prevent slippage.
-- **Pliers**: Used for gripping, bending, and cutting wire. *Never use pliers on hexagonal nuts* (always use a matching spanner or socket wrench to avoid stripping the edges!).'),
-
-('M003', 'Elements of Narrative Essay Writing', 'English Narrative Writing', 'Grade 9', 'T003', '### English Composition: Narrative Essay Structure
-
-A narrative essay is a story writing format that communicates a central theme or life lesson through a sequential chain of events.
-
-#### 1. Core Elements of a Story
-- **Plot**: The chronological or logical sequence of events.
-- **Setting**: The environmental time and place (e.g. Thika Kiganjo during the long rains).
-- **Characters**: The protagonists and antagonists driving the action.
-
-#### 2. Narrative Arc Architecture
-- **The Hook (Intro)**: Catches the readers attention and sets the tone.
-- **Rising Action**: A series of complications that build up tension.
-- **The Climax**: The emotional peak and ultimate turning point.
-- **Falling Action**: Post-climax resolution where tension begins to subside.
-- **The Resolution**: The final wrap-up showing the lesson or moral.');
+- Large Intestine: Absorbs remaining water and salts, consolidating waste.');
 
 -- Seed Timetable Events
 INSERT INTO timetable_events (id, teacher_id, subject, stream, start_time, end_time, room) VALUES
-('E001', 'T001', 'Science & Lab', 'Grade 7A', 495, 545, 'Science Lab 1'), -- 08:15 AM - 09:05 AM
-('E002', 'T001', 'Science Review', 'Grade 7A', 660, 710, 'Grade 7 Classroom'), -- 11:00 AM - 11:50 AM
-('E003', 'T002', 'Pre-Tech Workshop', 'Grade 8', 555, 605, 'Technical Lab'),  -- 09:15 AM - 10:05 AM
-('E004', 'T003', 'English Composition', 'Grade 9', 720, 770, 'Room 12B');     -- 12:00 PM - 12:50 PM
+('E001', 'T001', 'Science & Lab', 'Grade 6 East', 495, 545, 'Science Lab 1'),
+('E002', 'T001', 'Science Review', 'Grade 6 East', 660, 710, 'Grade 6 Classroom');
 
 -- -----------------------------------------------------
 -- 5. ENABLE ROW LEVEL SECURITY (RLS) FOR SUPABASE

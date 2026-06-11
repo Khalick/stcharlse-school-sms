@@ -97,7 +97,8 @@ ${materialContent}
           { role: 'user', content: query }
         ],
         temperature: 0.6,
-        max_tokens: 1024
+        max_tokens: 1024,
+        stream: true
       })
     });
 
@@ -106,9 +107,44 @@ ${materialContent}
       throw new Error(`NVIDIA API returned error status: ${response.status} - ${JSON.stringify(errBody)}`);
     }
 
-    const json = await response.json() as any;
-    const answer = json.choices?.[0]?.message?.content || 'Charlie could not generate a response right now.';
-    res.json({ response: answer });
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    if (response.body) {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n').filter(line => line.trim() !== '');
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const dataStr = line.slice(6);
+            if (dataStr === '[DONE]') {
+              res.write('data: [DONE]\n\n');
+              res.end();
+              return;
+            }
+            try {
+              const dataObj = JSON.parse(dataStr);
+              const text = dataObj.choices?.[0]?.delta?.content || '';
+              if (text) {
+                res.write(`data: ${JSON.stringify({ text })}\n\n`);
+              }
+            } catch (e) {
+              console.error('Error parsing SSE json', e);
+            }
+          }
+        }
+      }
+    }
+    
+    res.end();
   } catch (error: any) {
     console.error('Charlie AI Chat API Error:', error);
     res.status(500).json({ error: 'Failed to query Charlie AI companion: ' + error.message });
@@ -145,7 +181,7 @@ Each event must contain:
 - "startTime": string in HH:MM format (e.g. "08:15", "10:30")
 - "endTime": string in HH:MM format (e.g. "09:00", "11:15")
 - "subject": string (e.g. "Science", "Mathematics", "Kiswahili", "English")
-- "stream": string (Must match one of: "Pre-Primary 1", "Pre-Primary 2", "Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6", "Grade 7A", "Grade 8", "Grade 9")
+- "stream": string (Must match exactly one of: "Play Group Mourine", "Play Group Gachira", "Play Group Salome", "PP1 Munene", "PP1 Ann", "PP1 Fresha", "PP2 Carol", "PP2 Mary", "PP2 Triza", "Grade 1 East", "Grade 1 West", "Grade 1 North", "Grade 2 East", "Grade 2 West", "Grade 2 North", "Grade 3 East", "Grade 3 West", "Grade 3 North", "Grade 4 East", "Grade 4 West", "Grade 4 North", "Grade 4 South", "Grade 5 East", "Grade 5 West", "Grade 5 North", "Grade 5 South", "Grade 6 East", "Grade 6 West", "Grade 6 North", "Grade 7 Batian", "Grade 7 Lenana", "Grade 7 Nelion", "Grade 8 Lenana", "Grade 8 Batian", "Grade 9 Lenana", "Grade 9 Batian")
 - "teacherName": string (e.g. "Agnes", "Mark", "Beatrice", "Neri")
 - "room": string (e.g. "Room 4", "Room 5 (Workshop)")
 

@@ -774,9 +774,9 @@ async function loadTeacherWeeklyGrid(container: HTMLElement, stream: string) {
 
 function showDraftReportModal(container: HTMLElement, student: any, stream: string) {
   let subjects: string[] = [];
-  if (stream.startsWith('Pre') || stream === 'Grade 1' || stream === 'Grade 2' || stream === 'Grade 3') {
+  if (stream.includes('Play Group') || stream.includes('PP1') || stream.includes('PP2') || stream.includes('Grade 1') || stream.includes('Grade 2') || stream.includes('Grade 3')) {
     subjects = ['Mathematics Activities', 'English Language Activities', 'Kiswahili Language Activities', 'Environmental Activities', 'Hygiene and Nutrition Activities', 'CRE / IRE / HRE', 'Movement and Creative Activities'];
-  } else if (stream === 'Grade 4' || stream === 'Grade 5' || stream === 'Grade 6') {
+  } else if (stream.includes('Grade 4') || stream.includes('Grade 5') || stream.includes('Grade 6')) {
     subjects = ['Mathematics', 'English', 'Kiswahili', 'Science and Technology', 'Agriculture', 'Home Science', 'Creative Arts', 'Physical and Health Education', 'CRE / IRE / HRE', 'Social Studies'];
   } else {
     subjects = ['English', 'Kiswahili', 'Mathematics', 'Integrated Science', 'Health Education', 'Pre-Technical and Pre-Career Education', 'Social Studies', 'Religious Education', 'Business Studies', 'Agriculture', 'Life Skills Education', 'Sports and Physical Education'];
