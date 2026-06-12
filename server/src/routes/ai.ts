@@ -537,61 +537,119 @@ router.post('/generate-image', authenticateToken, async (req: AuthRequest, res: 
   }
 });
 
-// POST /api/ai/scan - Google Cloud Vision via Service Account JWT (no API key needed)
+// POST /api/ai/scan
+// Primary: NVIDIA Llama-3.2-11B-Vision (already configured, no billing)
+// Fallback: Google Cloud Vision (requires billing enabled on GCP project)
 router.post('/scan', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   const { imageBase64 } = req.body;
   if (!imageBase64) { res.status(400).json({ error: 'Missing imageBase64 data.' }); return; }
 
+  const cleanBase64 = imageBase64.replace(/^data:image\/[a-z]+;base64,/, '');
+  const nvidiaKey   = process.env.NVIDIA_API_KEY;
+
+  // ── PRIMARY: NVIDIA Llama-3.2-11B Vision ───────────────────────────────
+  if (nvidiaKey) {
+    try {
+      console.log('[OCR] Trying NVIDIA Llama-3.2-11B-Vision...');
+
+      const nvidiaResp = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${nvidiaKey}`
+        },
+        body: JSON.stringify({
+          model: 'meta/llama-3.2-11b-vision-instruct',
+          messages: [
+            {
+              role: 'system',
+              content: 'You are a handwriting OCR assistant for a school exam system. Your ONLY job is to read the handwritten exam mark (a number between 0 and 100) from the image provided. Respond with ONLY the number — no words, no explanation, no units, no punctuation. If you see "78", respond "78". If you cannot read a number, respond "NONE".'
+            },
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: 'What is the handwritten exam mark in this image? Respond with the number only.'
+                },
+                {
+                  type: 'image_url',
+                  image_url: { url: `data:image/jpeg;base64,${cleanBase64}` }
+                }
+              ]
+            }
+          ],
+          max_tokens: 10,
+          temperature: 0,
+          top_p: 1,
+          stream: false
+        })
+      });
+
+      if (!nvidiaResp.ok) {
+        const errTxt = await nvidiaResp.text();
+        throw new Error(`NVIDIA API ${nvidiaResp.status}: ${errTxt}`);
+      }
+
+      const nvidiaJson = await nvidiaResp.json() as any;
+      const rawAnswer  = (nvidiaJson.choices?.[0]?.message?.content || '').trim();
+      console.log('[OCR] NVIDIA raw answer:', JSON.stringify(rawAnswer));
+
+      if (rawAnswer && rawAnswer !== 'NONE') {
+        const parsed = parseInt(rawAnswer.replace(/[^0-9]/g, ''), 10);
+        if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
+          console.log('[OCR] ✅ NVIDIA detected mark:', parsed);
+          res.json({ detectedMark: parsed, rawText: rawAnswer, engine: 'nvidia-llama-vision' });
+          return;
+        }
+      }
+
+      // Model said NONE or gave something unreadable
+      console.log('[OCR] NVIDIA could not read a number. Mark null.');
+      res.json({ detectedMark: null, rawText: rawAnswer, engine: 'nvidia-llama-vision' });
+      return;
+
+    } catch (nvidiaErr: any) {
+      console.warn('[OCR] NVIDIA failed, trying Google Vision fallback:', nvidiaErr.message);
+    }
+  }
+
+  // ── FALLBACK: Google Cloud Vision ──────────────────────────────────────
   const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
   const privateKey  = process.env.GOOGLE_PRIVATE_KEY;
 
-  if (!clientEmail || !privateKey) {
-    console.warn('[Vision] ⚠ Service account not configured — returning mock mark.');
-    res.json({ detectedMark: null, rawText: '', debug: 'MISSING_CREDENTIALS' });
-    return;
-  }
-
-  try {
-    const accessToken = await getVisionAccessToken();
-    const cleanBase64 = imageBase64.replace(/^data:image\/[a-z]+;base64,/, '');
-
-    const visionResp = await fetch('https://vision.googleapis.com/v1/images:annotate', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`
-      },
-      body: JSON.stringify({
-        requests: [{
-          image: { content: cleanBase64 },
-          features: [
-            { type: 'TEXT_DETECTION',          maxResults: 20 },
-            { type: 'DOCUMENT_TEXT_DETECTION', maxResults: 5  }
-          ],
-          imageContext: { languageHints: ['en-t-i0-handwrit', 'en'] }
-        }]
-      })
-    });
-
-    if (!visionResp.ok) {
-      const errTxt = await visionResp.text();
-      throw new Error(`Vision API ${visionResp.status}: ${errTxt}`);
+  if (clientEmail && privateKey) {
+    try {
+      const accessToken = await getVisionAccessToken();
+      const visionResp  = await fetch('https://vision.googleapis.com/v1/images:annotate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
+        body: JSON.stringify({
+          requests: [{
+            image: { content: cleanBase64 },
+            features: [{ type: 'TEXT_DETECTION', maxResults: 20 }],
+            imageContext: { languageHints: ['en-t-i0-handwrit', 'en'] }
+          }]
+        })
+      });
+      if (!visionResp.ok) {
+        const errTxt = await visionResp.text();
+        throw new Error(`Vision API ${visionResp.status}: ${errTxt}`);
+      }
+      const visionJson = await visionResp.json() as any;
+      const rawText    = visionJson.responses?.[0]?.fullTextAnnotation?.text ||
+                         visionJson.responses?.[0]?.textAnnotations?.[0]?.description || '';
+      const detectedMark = extractExamMark(rawText);
+      console.log('[OCR] ✅ Google Vision detected mark:', detectedMark, '| raw:', rawText);
+      res.json({ detectedMark, rawText, engine: 'google-vision' });
+      return;
+    } catch (gErr: any) {
+      console.error('[OCR] Google Vision also failed:', gErr.message);
     }
-
-    const json = await visionResp.json() as any;
-    const rawText = (
-      json.responses?.[0]?.fullTextAnnotation?.text ||
-      json.responses?.[0]?.textAnnotations?.[0]?.description ||
-      ''
-    );
-
-    const detectedMark = extractExamMark(rawText);
-    res.json({ detectedMark, rawText });
-
-  } catch (error: any) {
-    console.error('[OCR] Error:', error.message);
-    res.status(500).json({ error: 'OCR failed: ' + error.message });
   }
+
+  // ── BOTH FAILED ────────────────────────────────────────────────────────
+  res.json({ detectedMark: null, rawText: '', engine: 'none' });
 });
 
 export default router;

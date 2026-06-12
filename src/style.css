@@ -936,3 +936,16 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   /* Ensure conf header is readable */
   #conf-name { font-size: 1.1rem !important; }
 }
+
+/* ═══ SCAN RETICLE ANIMATION ═══ */
+@keyframes scanSweep {
+  0%   { top: 8px;  opacity: 0; }
+  15%  { opacity: 1; }
+  85%  { opacity: 1; }
+  100% { top: calc(100% - 10px); opacity: 0; }
+}
+/* Reticle inherits full overlay width on all screens */
+#scan-reticle { width: 100% !important; }
+@media (max-width: 768px) {
+  #scan-reticle { height: 140px !important; }
+}

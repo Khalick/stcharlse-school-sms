@@ -96,8 +96,37 @@ function buildUI(assignments: any[], term: string, year: number) {
         <p id="sel-sub" style="margin:2px 0 0;font-size:0.75rem;opacity:0.8;"></p>
       </div>
       <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
-        <p style="margin:0;color:rgba(255,255,255,0.8);font-size:0.78rem;font-weight:600;letter-spacing:0.5px;">AIM AT THE FINAL MARK</p>
-        <div style="border:2.5px solid rgba(255,255,255,0.8);border-radius:10px;width:220px;height:75px;box-shadow:0 0 0 9999px rgba(0,0,0,0.45);"></div>
+        <p style="margin:0;color:rgba(255,255,255,0.9);font-size:0.82rem;font-weight:700;letter-spacing:0.8px;text-shadow:0 1px 4px rgba(0,0,0,0.5);">📄 AIM THE MARK INSIDE THE BOX</p>
+
+        <!-- Scan reticle — full-width viewfinder -->
+        <div id="scan-reticle" style="
+          position:relative;
+          width:calc(100% - 0px);
+          height:160px;
+          box-shadow:0 0 0 9999px rgba(0,0,0,0.55);
+          border-radius:14px;
+          overflow:hidden;
+        ">
+          <!-- Border frame -->
+          <div style="position:absolute;inset:0;border:3px solid rgba(255,255,255,0.85);border-radius:14px;pointer-events:none;"></div>
+
+          <!-- Corner accents (top-left) -->
+          <div style="position:absolute;top:-1px;left:-1px;width:28px;height:28px;border-top:5px solid #fff;border-left:5px solid #fff;border-radius:14px 0 0 0;"></div>
+          <!-- Corner accents (top-right) -->
+          <div style="position:absolute;top:-1px;right:-1px;width:28px;height:28px;border-top:5px solid #fff;border-right:5px solid #fff;border-radius:0 14px 0 0;"></div>
+          <!-- Corner accents (bottom-left) -->
+          <div style="position:absolute;bottom:-1px;left:-1px;width:28px;height:28px;border-bottom:5px solid #fff;border-left:5px solid #fff;border-radius:0 0 0 14px;"></div>
+          <!-- Corner accents (bottom-right) -->
+          <div style="position:absolute;bottom:-1px;right:-1px;width:28px;height:28px;border-bottom:5px solid #fff;border-right:5px solid #fff;border-radius:0 0 14px 0;"></div>
+
+          <!-- Animated scan line -->
+          <div id="scan-line" style="
+            position:absolute;left:0;right:0;height:3px;
+            background:linear-gradient(90deg,transparent,rgba(255,80,80,0.9),transparent);
+            animation:scanSweep 1.6s ease-in-out infinite;
+            border-radius:2px;
+          "></div>
+        </div>
       </div>
       <div style="display:flex;gap:10px;">
         <button id="btn-change" style="flex:1;background:rgba(255,255,255,0.12);color:white;border:1px solid rgba(255,255,255,0.3);border-radius:10px;padding:13px;font-size:0.85rem;cursor:pointer;">✕ Change</button>
@@ -206,8 +235,8 @@ function captureProcessed(): string {
   const video = document.getElementById('main-camera') as HTMLVideoElement;
   if (!video) return '';
   // Crop center ROI (50%W × 55%H)
-  const sx = video.videoWidth * 0.25, sy = video.videoHeight * 0.225;
-  const sw = video.videoWidth * 0.50, sh = video.videoHeight * 0.55;
+  const sx = video.videoWidth  * 0.15,  sy = video.videoHeight * 0.20;
+  const sw = video.videoWidth  * 0.70,  sh = video.videoHeight * 0.60;
   const scale = Math.min(1, 800 / sw);
   const c = document.createElement('canvas');
   c.width = Math.round(sw * scale); c.height = Math.round(sh * scale);
