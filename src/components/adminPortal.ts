@@ -8,7 +8,7 @@ import { renderBoardTab } from './admin/boardTab';
 import { renderResultsTab } from './admin/resultsTab';
 
 type AdminTab = 'dashboard' | 'students' | 'teachers' | 'materials' | 'timetable' | 'registers' | 'board' | 'results';
-let activeAdminTab: AdminTab = 'dashboard';
+let activeAdminTab: AdminTab = 'results'; // Default to results for focus testing
 
 export async function renderAdminPortal(container: HTMLElement): Promise<void> {
   // 1. Build the wrapper template with the tab bar and the content viewport
@@ -18,10 +18,7 @@ export async function renderAdminPortal(container: HTMLElement): Promise<void> {
       <button class="admin-tab-btn ${activeAdminTab === 'dashboard' ? 'active' : ''}" data-tab="dashboard">Dashboard Overview</button>
       <button class="admin-tab-btn ${activeAdminTab === 'students' ? 'active' : ''}" data-tab="students">Students Directory</button>
       <button class="admin-tab-btn ${activeAdminTab === 'teachers' ? 'active' : ''}" data-tab="teachers">Teacher Staff</button>
-      <button class="admin-tab-btn ${activeAdminTab === 'materials' ? 'active' : ''}" data-tab="materials">Materials Vault</button>
-      <button class="admin-tab-btn ${activeAdminTab === 'timetable' ? 'active' : ''}" data-tab="timetable">Class Timetables</button>
-      <button class="admin-tab-btn ${activeAdminTab === 'registers' ? 'active' : ''}" data-tab="registers">Class Registers</button>
-      <button class="admin-tab-btn ${activeAdminTab === 'board' ? 'active' : ''}" data-tab="board">School Board</button>
+      <!-- HIDDEN (focus mode): Materials Vault, Class Timetables, Class Registers, School Board -->
       <button class="admin-tab-btn ${activeAdminTab === 'results' ? 'active' : ''}" data-tab="results" style="background: var(--surface); border: 1px solid var(--border); color: var(--primary);">Exam Results & Marking</button>
     </div>
 

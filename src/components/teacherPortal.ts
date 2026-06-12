@@ -5,7 +5,7 @@ import { renderStudentsTab } from './admin/studentsTab.js';
 import { renderMarkingTab } from './teacher/markingTab.js';
 
 // Keep track of active tab in teacher portal
-let activeTeacherTab: 'attendance' | 'students' | 'materials' | 'analytics' | 'reports' | 'marking' = 'attendance';
+let activeTeacherTab: 'attendance' | 'students' | 'materials' | 'analytics' | 'reports' | 'marking' = 'marking';
 
 // Keep track of active workspace selection for teacher
 interface WorkspaceOption {
@@ -124,11 +124,7 @@ export async function renderTeacherPortal(container: HTMLElement): Promise<void>
 
       <!-- Workspace Tab Selector -->
       <div class="admin-tabs">
-        ${activeWorkspace.type === 'class' ? `
-          <button class="admin-tab-btn ${activeTeacherTab === 'attendance' ? 'active' : ''}" data-tab="attendance">Attendance Registers</button>
-        ` : ''}
-        <button class="admin-tab-btn ${activeTeacherTab === 'students' ? 'active' : ''}" data-tab="students">Students Roster</button>
-        <button class="admin-tab-btn ${activeTeacherTab === 'materials' ? 'active' : ''}" data-tab="materials">Study Resources</button>
+        <!-- HIDDEN (focus mode): Attendance Registers, Students Roster, Study Resources -->
         <button class="admin-tab-btn ${activeTeacherTab === 'analytics' ? 'active' : ''}" data-tab="analytics">Student Analytics</button>
         <button class="admin-tab-btn ${activeTeacherTab === 'reports' ? 'active' : ''}" data-tab="reports">Report Cards</button>
         <button class="admin-tab-btn ${activeTeacherTab === 'marking' ? 'active' : ''}" data-tab="marking" style="background: var(--surface); border: 1px solid var(--border); color: var(--primary);">Assessment Studio</button>

@@ -775,3 +775,164 @@ select.form-control { cursor:pointer; }
   outline: none;
 }
 
+
+/* ═══════════════════════════════════════════════════════════
+   MOBILE-FIRST — TEACHER ASSESSMENT STUDIO
+   Tested targets: Android Chrome, iOS Safari 16+
+   ═══════════════════════════════════════════════════════════ */
+
+/* Prevent iOS auto-zoom on input focus (font-size must be ≥ 16px) */
+input[type="text"],input[type="number"],input[type="email"],
+input[type="password"],select,textarea { font-size: 16px; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+@keyframes capturePulse {
+  0%   { box-shadow: 0 0 0 0 rgba(165,28,48,0.45); }
+  70%  { box-shadow: 0 0 0 12px rgba(165,28,48,0); }
+  100% { box-shadow: 0 0 0 0 rgba(165,28,48,0); }
+}
+@keyframes sheetSlideUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+/* ═══ TABLET (≤900px) ═══ */
+@media (max-width: 900px) {
+  .main-layout { padding: 16px 14px 110px 14px; }
+  .admin-tabs { overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+  .admin-tabs::-webkit-scrollbar { display:none; }
+  .admin-tab-btn { padding:10px 16px; white-space:nowrap; flex-shrink:0; min-height:44px; }
+}
+
+/* ═══ MOBILE (≤768px) ═══ */
+@media (max-width: 768px) {
+
+  /* Global */
+  .main-layout { padding: 10px 10px 90px 10px; }
+  .card { padding: 12px 14px; border-radius: 8px; }
+
+  /* App header compact */
+  .app-header { padding: 10px 14px; }
+  .brand-text h1 { font-size: 1.1rem; }
+  .brand-text p { display: none; }
+  .school-badge { font-size: 1.4rem; }
+  .role-sub-badge { display: none; }
+  .user-badge { padding: 4px 10px; }
+  .btn-signout { font-size: 0.72rem; padding: 5px 10px; }
+
+  /* Teacher workspace header */
+  .user-switch-bar { flex-direction:column; align-items:flex-start; gap:8px; margin-bottom:10px; padding-bottom:10px; }
+  .workspace-header-text h2 { font-size: 0.95rem; }
+  .workspace-header-text p  { font-size: 0.75rem; }
+  .workspace-switcher-wrapper { width:100%; margin-left:0 !important; }
+  .workspace-switcher-wrapper select { width:100%; font-size:16px; }
+
+  /* Tab bar */
+  .admin-tabs { overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; gap:0; margin-bottom:10px; }
+  .admin-tabs::-webkit-scrollbar { display:none; }
+  .admin-tab-btn { padding:10px 14px; font-size:0.76rem; flex-shrink:0; min-height:44px; }
+
+  /* Scanner workspace height */
+  #scanner-workspace { min-height:calc(100svh - 260px) !important; min-height:calc(100vh - 260px) !important; }
+
+  /* Start button */
+  #btn-start { min-height:56px !important; font-size:1.05rem !important; padding:16px 36px !important; border-radius:14px !important; animation:capturePulse 2s infinite; }
+
+  /* Capture button */
+  #btn-capture { min-height:58px !important; font-size:1.1rem !important; border-radius:12px !important; animation:capturePulse 1.8s infinite; }
+
+  /* Secondary buttons */
+  #btn-change,#btn-retake,#btn-log { min-height:50px !important; font-size:0.95rem !important; }
+
+  /* Search input: no iOS zoom */
+  #student-search { font-size:16px !important; padding:14px 16px !important; border-radius:10px !important; }
+
+  /* Search result items: large touch targets */
+  .sr-item { padding:14px 16px !important; min-height:56px !important; border-radius:10px !important; margin-bottom:8px !important; }
+
+  /* Confirm overlay: BOTTOM SHEET */
+  #ov-confirming { align-items:flex-end !important; padding:0 !important; background:rgba(10,29,55,0.65) !important; backdrop-filter:blur(4px); }
+  #ov-confirming > div { border-radius:20px 20px 0 0 !important; width:100% !important; max-width:100% !important; animation:sheetSlideUp 0.28s cubic-bezier(0.32,0.72,0,1) forwards; }
+  #ov-confirming > div::before { content:''; display:block; width:40px; height:4px; background:#d1d5db; border-radius:2px; margin:10px auto 0; }
+
+  /* Confirm number input: huge on mobile */
+  #conf-mark { font-size:4.5rem !important; width:130px !important; min-height:90px !important; border-radius:12px !important; }
+
+  /* Progress counter */
+  #progress-counter { font-size:1.8rem !important; }
+
+  /* Toast notifications */
+  .toast-container { right:10px; left:10px; max-width:none; top:66px; }
+  .toast-alert { border-radius:8px; }
+
+  /* Stats strip */
+  .stats-strip { grid-template-columns:1fr 1fr; gap:10px; }
+
+  /* Detail drawer */
+  .detail-drawer { width:100vw; }
+
+  /* Tables: horizontal scroll */
+  .table-wrapper,.broadsheet-table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .premium-table { min-width:480px; }
+
+  /* Pending panel */
+  #pend-chips { max-height:56px; }
+  #pend-badge { font-size:0.8rem; }
+}
+
+/* ═══ SMALL PHONES (≤400px) ═══ */
+@media (max-width: 400px) {
+  .admin-tab-btn { padding:9px 11px; font-size:0.72rem; }
+  .brand-text h1 { font-size:0.95rem; }
+  #conf-mark { font-size:3.8rem !important; width:115px !important; }
+  #btn-capture { font-size:1rem !important; }
+  .main-layout { padding:8px 8px 90px 8px; }
+}
+
+/* ═══ LANDSCAPE MOBILE ═══ */
+@media (max-width: 900px) and (orientation: landscape) {
+  #scanner-workspace { min-height:60vw !important; }
+  #ov-confirming { align-items:center !important; padding:12px !important; }
+  #ov-confirming > div { border-radius:16px !important; max-width:480px !important; width:90% !important; max-height:90vh; overflow-y:auto; }
+  #ov-confirming > div::before { display:none; }
+}
+
+/* ═══ REDUCE MOTION ═══ */
+@media (prefers-reduced-motion: reduce) {
+  #btn-start,#btn-capture { animation:none !important; }
+}
+
+/* ═══ SIMULATOR BAR — COMPACT ON MOBILE ═══ */
+@media (max-width: 768px) {
+  #simulator-bar { padding: 6px 14px; border-top-width: 1px; }
+  .simulator-panel { gap: 6px; flex-wrap: nowrap; justify-content: space-between; }
+  #simulator-bar .sim-controls { display: none; }
+  .sim-clock-display { font-size: 0.95rem; }
+  .sim-info-badge { font-size: 0.55rem; padding: 2px 6px; }
+  .main-layout { padding-bottom: 50px !important; }
+}
+
+/* ═══ CONFIRM DIALOG: VERTICAL LAYOUT ON MOBILE ═══ */
+@media (max-width: 768px) {
+  /* Stack image above number input, both full-width */
+  .conf-layout { flex-direction: column !important; }
+  .conf-layout > div:first-child { min-height: 110px; }
+  /* Large centred number stays legible */
+  #conf-mark {
+    font-size: 4.5rem !important;
+    width: 140px !important;
+    height: 90px !important;
+    border-radius: 12px !important;
+    border: 2px solid var(--border-dark) !important;
+    padding: 0 !important;
+  }
+  /* Bigger confirm/retake buttons for thumbs */
+  #btn-log, #btn-retake {
+    padding: 15px !important;
+    font-size: 1rem !important;
+    min-height: 52px;
+    border-radius: 10px !important;
+  }
+  /* Ensure conf header is readable */
+  #conf-name { font-size: 1.1rem !important; }
+}

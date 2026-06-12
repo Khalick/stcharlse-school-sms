@@ -69,7 +69,7 @@ function buildUI(assignments: any[], term: string, year: number) {
     <!-- [STATE: start] Camera not yet started -->
     <div id="ov-start" style="position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;background:rgba(10,29,55,0.96);color:white;gap:16px;text-align:center;padding:24px;">
       <div style="font-size:3.5rem;">📷</div>
-      <h3 style="margin:0;max-width:260px;line-height:1.4;">Tap to start your marking session</h3>
+      <h3 style="margin:0;max-width:280px;line-height:1.4;color:white;">Tap to start your marking session</h3>
       <p style="margin:0;font-size:0.82rem;opacity:0.7;max-width:260px;">Pick up any paper from the pile. Search the student's name. Scan their mark. Repeat.</p>
       <button id="btn-start" style="background:var(--crimson);color:white;border:none;border-radius:12px;padding:14px 32px;font-size:1rem;font-weight:700;cursor:pointer;">Start Marking Session</button>
     </div>
@@ -92,7 +92,7 @@ function buildUI(assignments: any[], term: string, year: number) {
     <div id="ov-selected" style="position:absolute;inset:0;display:none;flex-direction:column;justify-content:space-between;padding:16px;">
       <div style="background:var(--crimson);color:white;border-radius:12px;padding:12px 18px;text-align:center;">
         <p style="margin:0;font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;opacity:0.85;">Now marking</p>
-        <h3 id="sel-name" style="margin:3px 0 0;font-size:1.1rem;font-weight:800;"></h3>
+        <h3 id="sel-name" style="margin:3px 0 0;font-size:1.1rem;font-weight:800;color:white;"></h3>
         <p id="sel-sub" style="margin:2px 0 0;font-size:0.75rem;opacity:0.8;"></p>
       </div>
       <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
@@ -112,7 +112,7 @@ function buildUI(assignments: any[], term: string, year: number) {
           <p style="margin:0;font-size:0.68rem;color:var(--text-light);text-transform:uppercase;letter-spacing:0.5px;">Confirm Mark</p>
           <h4 id="conf-name" style="margin:3px 0 0;font-size:1rem;font-weight:800;color:var(--navy);"></h4>
         </div>
-        <div style="display:flex;">
+        <div class="conf-layout" style="display:flex;">
           <div style="flex:1;background:#f5f5f5;padding:16px;display:flex;align-items:center;justify-content:center;min-height:130px;">
             <img id="conf-img" src="" style="max-width:100%;max-height:130px;border-radius:6px;box-shadow:0 3px 10px rgba(0,0,0,0.15);" />
           </div>
@@ -136,7 +136,7 @@ function buildUI(assignments: any[], term: string, year: number) {
     <!-- [STATE: success] Brief success flash -->
     <div id="ov-success" style="position:absolute;inset:0;display:none;background:rgba(22,163,74,0.88);flex-direction:column;justify-content:center;align-items:center;color:white;text-align:center;padding:24px;">
       <div style="font-size:4rem;line-height:1;">✓</div>
-      <h2 id="succ-msg" style="margin:10px 0;font-size:1.2rem;"></h2>
+      <h2 id="succ-msg" style="margin:10px 0;font-size:1.2rem;color:white;"></h2>
       <p style="margin:0;font-size:0.85rem;opacity:0.85;">Pick up the next paper from the pile ↓</p>
     </div>
   </div>

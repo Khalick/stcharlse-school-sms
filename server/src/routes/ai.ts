@@ -1,8 +1,90 @@
 import { Router, type Response } from 'express';
 import multer from 'multer';
 import fs from 'fs';
+import crypto from 'crypto';
 import { sql } from '../db.js';
 import { authenticateToken, type AuthRequest } from '../middleware/auth.js';
+
+// ─── Google Vision Service Account Auth (JWT + Token Cache) ─────────────────
+let _visionTokenCache: { token: string; expires: number } | null = null;
+
+async function getVisionAccessToken(): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  if (_visionTokenCache && _visionTokenCache.expires > now + 60) {
+    return _visionTokenCache.token;
+  }
+
+  const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
+  const rawKey = process.env.GOOGLE_PRIVATE_KEY;
+  if (!clientEmail || !rawKey) throw new Error('Google service account env vars missing.');
+
+  const privateKey = rawKey.replace(/\\n/g, '\n');
+
+  const header  = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({
+    iss: clientEmail,
+    scope: 'https://www.googleapis.com/auth/cloud-vision',
+    aud: 'https://oauth2.googleapis.com/token',
+    iat: now,
+    exp: now + 3600
+  })).toString('base64url');
+
+  const toSign = `${header}.${payload}`;
+  const signer = crypto.createSign('RSA-SHA256');
+  signer.update(toSign);
+  const sig = signer.sign(privateKey, 'base64url');
+  const jwt = `${toSign}.${sig}`;
+
+  const resp = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion: jwt
+    })
+  });
+
+  if (!resp.ok) {
+    const txt = await resp.text();
+    throw new Error(`Token exchange failed (${resp.status}): ${txt}`);
+  }
+
+  const data = await resp.json() as any;
+  _visionTokenCache = { token: data.access_token, expires: now + (data.expires_in || 3600) };
+  console.log('[Vision] 🔑 New access token obtained, valid for', data.expires_in, 'seconds.');
+  return _visionTokenCache.token;
+}
+
+// ─── Smart Exam Mark Extractor ────────────────────────────────────────────────
+function extractExamMark(rawText: string): number | null {
+  if (!rawText || !rawText.trim()) return null;
+  console.log('[OCR] Raw text from Vision API:', JSON.stringify(rawText));
+
+  // Strategy 1: "TOTAL: 78" / "TOTAL 78" / "TOT: 78" / "SCORE: 78"
+  const totalMatch = rawText.match(/(?:TOTAL|TOT|SCORE|MARKS?)\s*[:\-=]?\s*(\d{1,3})/i);
+  if (totalMatch) {
+    const n = parseInt(totalMatch[1], 10);
+    if (n >= 0 && n <= 100) { console.log('[OCR] Found via TOTAL pattern:', n); return n; }
+  }
+
+  // Strategy 2: "78/100" or "78 / 100" — the mark before the slash
+  const fractionMatch = rawText.match(/(\d{1,3})\s*\/\s*(100|80|60|50|40|30|20)/);
+  if (fractionMatch) {
+    const n = parseInt(fractionMatch[1], 10);
+    if (n >= 0 && n <= 100) { console.log('[OCR] Found via fraction pattern:', n); return n; }
+  }
+
+  // Strategy 3: All standalone numbers in valid range — return the largest
+  const nums = Array.from(rawText.matchAll(/(?<![./])\b(\d{1,3})\b(?![./])/g))
+    .map(m => parseInt(m[1], 10))
+    .filter(n => n >= 0 && n <= 100);
+
+  if (nums.length === 1) { console.log('[OCR] Single number found:', nums[0]); return nums[0]; }
+  if (nums.length > 1)   { const best = Math.max(...nums); console.log('[OCR] Multiple numbers, using max:', best, 'from', nums); return best; }
+
+  console.warn('[OCR] No valid number found in text:', rawText);
+  return null;
+}
 
 const upload = multer({ dest: '/tmp/' });
 const router = Router();
@@ -455,57 +537,60 @@ router.post('/generate-image', authenticateToken, async (req: AuthRequest, res: 
   }
 });
 
-// POST /api/ai/scan - Proxy image to Google Cloud Vision API and return detected number
+// POST /api/ai/scan - Google Cloud Vision via Service Account JWT (no API key needed)
 router.post('/scan', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   const { imageBase64 } = req.body;
+  if (!imageBase64) { res.status(400).json({ error: 'Missing imageBase64 data.' }); return; }
 
-  if (!imageBase64) {
-    res.status(400).json({ error: 'Missing imageBase64 data.' });
+  const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
+  const privateKey  = process.env.GOOGLE_PRIVATE_KEY;
+
+  if (!clientEmail || !privateKey) {
+    console.warn('[Vision] ⚠ Service account not configured — returning mock mark.');
+    res.json({ detectedMark: null, rawText: '', debug: 'MISSING_CREDENTIALS' });
     return;
   }
 
   try {
-    const apiKey = process.env.GOOGLE_CLOUD_VISION_API_KEY;
-    if (!apiKey) {
-      // Mock mode for local testing if API key is not yet provided
-      console.warn('Google Vision API key missing. Mocking OCR response.');
-      // Random mock mark between 40 and 99
-      const randomMark = Math.floor(Math.random() * 60) + 40;
-      res.json({ detectedMark: randomMark, confidence: 0.95 });
-      return;
-    }
+    const accessToken = await getVisionAccessToken();
+    const cleanBase64 = imageBase64.replace(/^data:image\/[a-z]+;base64,/, '');
 
-    const response = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`, {
+    const visionResp = await fetch('https://vision.googleapis.com/v1/images:annotate', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`
+      },
       body: JSON.stringify({
-        requests: [
-          {
-            image: { content: imageBase64.replace(/^data:image\/[a-z]+;base64,/, '') },
-            features: [{ type: 'DOCUMENT_TEXT_DETECTION' }],
-            imageContext: {
-              languageHints: ['en-t-i0-handwrit']
-            }
-          }
-        ]
+        requests: [{
+          image: { content: cleanBase64 },
+          features: [
+            { type: 'TEXT_DETECTION',          maxResults: 20 },
+            { type: 'DOCUMENT_TEXT_DETECTION', maxResults: 5  }
+          ],
+          imageContext: { languageHints: ['en-t-i0-handwrit', 'en'] }
+        }]
       })
     });
 
-    if (!response.ok) {
-      throw new Error(`Google Vision API error: ${response.status}`);
+    if (!visionResp.ok) {
+      const errTxt = await visionResp.text();
+      throw new Error(`Vision API ${visionResp.status}: ${errTxt}`);
     }
 
-    const json = await response.json() as any;
-    const textAnnotation = json.responses?.[0]?.fullTextAnnotation?.text || '';
-    
-    // Extract numerical score using regex (e.g. "78" or "78/100" -> 78)
-    const match = textAnnotation.match(/(\d{1,3})/);
-    const detectedMark = match ? parseInt(match[1], 10) : null;
+    const json = await visionResp.json() as any;
+    const rawText = (
+      json.responses?.[0]?.fullTextAnnotation?.text ||
+      json.responses?.[0]?.textAnnotations?.[0]?.description ||
+      ''
+    );
 
-    res.json({ detectedMark, rawText: textAnnotation });
+    const detectedMark = extractExamMark(rawText);
+    res.json({ detectedMark, rawText });
+
   } catch (error: any) {
-    console.error('OCR Scanning Error:', error);
-    res.status(500).json({ error: 'Failed to scan handwritten mark.' });
+    console.error('[OCR] Error:', error.message);
+    res.status(500).json({ error: 'OCR failed: ' + error.message });
   }
 });
 
