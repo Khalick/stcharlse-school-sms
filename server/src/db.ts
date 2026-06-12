@@ -166,6 +166,84 @@ export async function initDb(): Promise<void> {
       )
     `;
 
+    // 4.10. Create grading_assignments table for cross-marking (Admin Portal)
+    await sql`
+      CREATE TABLE IF NOT EXISTS grading_assignments (
+        id SERIAL PRIMARY KEY,
+        teacher_id VARCHAR(50) REFERENCES teachers(id) ON DELETE CASCADE,
+        class_name VARCHAR(50) REFERENCES classes(name) ON DELETE CASCADE,
+        subject_name VARCHAR(100) NOT NULL,
+        term VARCHAR(20) NOT NULL,
+        year INT NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT unique_assignment UNIQUE (teacher_id, subject_name, class_name, term, year)
+      )
+    `;
+
+    // 4.11. Create exam_marks table
+    await sql`
+      CREATE TABLE IF NOT EXISTS exam_marks (
+        id SERIAL PRIMARY KEY,
+        student_id VARCHAR(50) REFERENCES students(id) ON DELETE CASCADE,
+        subject_name VARCHAR(100) NOT NULL,
+        exam_type VARCHAR(50) NOT NULL,
+        term VARCHAR(20) NOT NULL,
+        year INT NOT NULL,
+        raw_mark INT NOT NULL,
+        cbc_points INT,
+        cbc_grade VARCHAR(5),
+        verified_by_teacher_id VARCHAR(50) REFERENCES teachers(id),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT unique_student_exam UNIQUE (student_id, subject_name, exam_type, term, year)
+      )
+    `;
+
+    // 4.12. Create trigger to automatically calculate CBC points and grades
+    await sql`
+      CREATE OR REPLACE FUNCTION calculate_cbc_grade()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        IF NEW.raw_mark >= 90 THEN
+          NEW.cbc_points := 8;
+          NEW.cbc_grade := 'EE1';
+        ELSIF NEW.raw_mark >= 75 THEN
+          NEW.cbc_points := 7;
+          NEW.cbc_grade := 'EE2';
+        ELSIF NEW.raw_mark >= 58 THEN
+          NEW.cbc_points := 6;
+          NEW.cbc_grade := 'ME1';
+        ELSIF NEW.raw_mark >= 41 THEN
+          NEW.cbc_points := 5;
+          NEW.cbc_grade := 'ME2';
+        ELSIF NEW.raw_mark >= 31 THEN
+          NEW.cbc_points := 4;
+          NEW.cbc_grade := 'AE1';
+        ELSIF NEW.raw_mark >= 21 THEN
+          NEW.cbc_points := 3;
+          NEW.cbc_grade := 'AE2';
+        ELSIF NEW.raw_mark >= 11 THEN
+          NEW.cbc_points := 2;
+          NEW.cbc_grade := 'BE1';
+        ELSE
+          NEW.cbc_points := 1;
+          NEW.cbc_grade := 'BE2';
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+    `;
+
+    await sql`
+      DROP TRIGGER IF EXISTS trigger_calculate_cbc ON exam_marks;
+    `;
+    
+    await sql`
+      CREATE TRIGGER trigger_calculate_cbc
+      BEFORE INSERT OR UPDATE ON exam_marks
+      FOR EACH ROW
+      EXECUTE FUNCTION calculate_cbc_grade();
+    `;
+
     // 5. Check if we need to migrate teachers stream/subject
     const columnsResult = await sql`
       SELECT column_name 

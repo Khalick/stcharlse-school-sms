@@ -455,4 +455,58 @@ router.post('/generate-image', authenticateToken, async (req: AuthRequest, res: 
   }
 });
 
+// POST /api/ai/scan - Proxy image to Google Cloud Vision API and return detected number
+router.post('/scan', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
+  const { imageBase64 } = req.body;
+
+  if (!imageBase64) {
+    res.status(400).json({ error: 'Missing imageBase64 data.' });
+    return;
+  }
+
+  try {
+    const apiKey = process.env.GOOGLE_CLOUD_VISION_API_KEY;
+    if (!apiKey) {
+      // Mock mode for local testing if API key is not yet provided
+      console.warn('Google Vision API key missing. Mocking OCR response.');
+      // Random mock mark between 40 and 99
+      const randomMark = Math.floor(Math.random() * 60) + 40;
+      res.json({ detectedMark: randomMark, confidence: 0.95 });
+      return;
+    }
+
+    const response = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        requests: [
+          {
+            image: { content: imageBase64.replace(/^data:image\/[a-z]+;base64,/, '') },
+            features: [{ type: 'DOCUMENT_TEXT_DETECTION' }],
+            imageContext: {
+              languageHints: ['en-t-i0-handwrit']
+            }
+          }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Google Vision API error: ${response.status}`);
+    }
+
+    const json = await response.json() as any;
+    const textAnnotation = json.responses?.[0]?.fullTextAnnotation?.text || '';
+    
+    // Extract numerical score using regex (e.g. "78" or "78/100" -> 78)
+    const match = textAnnotation.match(/(\d{1,3})/);
+    const detectedMark = match ? parseInt(match[1], 10) : null;
+
+    res.json({ detectedMark, rawText: textAnnotation });
+  } catch (error: any) {
+    console.error('OCR Scanning Error:', error);
+    res.status(500).json({ error: 'Failed to scan handwritten mark.' });
+  }
+});
+
 export default router;

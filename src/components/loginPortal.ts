@@ -3,7 +3,7 @@ import type { SessionUser } from '../data/mockDb';
 import { triggerToastNotification } from './simulatorBar';
 import { playWarningChime, triggerHapticVibration } from '../lib/audioService';
 import { apiClient, setAuthToken } from '../data/apiClient';
-import { SCHOOL_STREAMS } from '../lib/constants';
+import { SCHOOL_STREAMS, getSubjectsForGrade } from '../lib/constants';
 
 let activeLoginTab: 'student' | 'teacher' | 'admin' = 'student';
 let isTeacherRegistering = false;
@@ -210,14 +210,7 @@ function bindLoginEvents(container: HTMLElement): void {
 
     streamSelect?.addEventListener('change', () => {
       const val = streamSelect.value;
-      let subjects: string[] = [];
-      if (val.includes('Play Group') || val.includes('PP1') || val.includes('PP2') || val.includes('Grade 1') || val.includes('Grade 2') || val.includes('Grade 3')) {
-        subjects = ['Mathematics Activities', 'English Language Activities', 'Kiswahili Language Activities', 'Environmental Activities', 'Hygiene and Nutrition Activities', 'CRE / IRE / HRE', 'Movement and Creative Activities'];
-      } else if (val === 'Grade 4' || val === 'Grade 5' || val === 'Grade 6') {
-        subjects = ['Mathematics', 'English', 'Kiswahili', 'Science and Technology', 'Agriculture', 'Home Science', 'Creative Arts', 'Physical and Health Education', 'CRE / IRE / HRE', 'Social Studies'];
-      } else if (val.startsWith('Grade 7') || val === 'Grade 8' || val === 'Grade 9') {
-        subjects = ['English', 'Kiswahili', 'Mathematics', 'Integrated Science', 'Health Education', 'Pre-Technical and Pre-Career Education', 'Social Studies', 'Religious Education', 'Business Studies', 'Agriculture', 'Life Skills Education', 'Sports and Physical Education'];
-      }
+      const subjects = getSubjectsForGrade(val);
       
       if (subjects.length > 0) {
         subjectsContainer.innerHTML = subjects.map(sub => `

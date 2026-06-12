@@ -2,9 +2,10 @@ import { getDb } from '../data/mockDb';
 import { triggerToastNotification } from './simulatorBar';
 import { apiClient } from '../data/apiClient';
 import { renderStudentsTab } from './admin/studentsTab.js';
+import { renderMarkingTab } from './teacher/markingTab.js';
 
 // Keep track of active tab in teacher portal
-let activeTeacherTab: 'attendance' | 'students' | 'materials' | 'analytics' | 'reports' = 'attendance';
+let activeTeacherTab: 'attendance' | 'students' | 'materials' | 'analytics' | 'reports' | 'marking' = 'attendance';
 
 // Keep track of active workspace selection for teacher
 interface WorkspaceOption {
@@ -130,6 +131,7 @@ export async function renderTeacherPortal(container: HTMLElement): Promise<void>
         <button class="admin-tab-btn ${activeTeacherTab === 'materials' ? 'active' : ''}" data-tab="materials">Study Resources</button>
         <button class="admin-tab-btn ${activeTeacherTab === 'analytics' ? 'active' : ''}" data-tab="analytics">Student Analytics</button>
         <button class="admin-tab-btn ${activeTeacherTab === 'reports' ? 'active' : ''}" data-tab="reports">Report Cards</button>
+        <button class="admin-tab-btn ${activeTeacherTab === 'marking' ? 'active' : ''}" data-tab="marking" style="background: var(--surface); border: 1px solid var(--border); color: var(--primary);">Assessment Studio</button>
       </div>
 
       <div id="teacher-active-tab-panel" style="margin-top: 20px;"></div>
@@ -426,6 +428,20 @@ export async function renderTeacherPortal(container: HTMLElement): Promise<void>
           if (student && activeWorkspace) showDraftReportModal(mc, student, activeWorkspace.stream);
         });
       });
+    } else if (activeTeacherTab === 'marking') {
+      tabPanel.innerHTML = `
+        <div style="position:relative; width:100%;">
+          ${isEveningLockActive ? `
+            <div class="lock-screen-overlay" style="z-index: 10; border-radius: 16px;">
+              <div class="lock-screen-title">Workspace Locked: Evening Register Required!</div>
+              <div class="lock-screen-desc">It is past 3:30 PM. To comply with St. Charles safety policies, other panels are locked until the <strong>Evening Check-Out</strong> register is submitted.</div>
+            </div>
+          ` : ''}
+          <div id="teacher-marking-inner"></div>
+        </div>
+      `;
+      const innerContainer = tabPanel.querySelector('#teacher-marking-inner') as HTMLElement;
+      await renderMarkingTab(innerContainer, teacher.id);
     }
 
     // Bind tab selectors

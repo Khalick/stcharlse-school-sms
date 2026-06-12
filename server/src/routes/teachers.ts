@@ -336,4 +336,126 @@ router.put('/:id/approve', authenticateToken, async (req: AuthRequest, res: Resp
 });
 
 
+// GET /api/teachers/:id/assigned-marking - Fetch classes/subjects assigned to the teacher
+router.get('/:id/assigned-marking', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const { term, year } = req.query;
+
+  if (req.user?.role !== 'admin' && req.user?.id !== id) {
+    res.status(403).json({ error: 'Access Denied: You are not authorized to access this workspace.' });
+    return;
+  }
+
+  if (!term || !year) {
+    res.status(400).json({ error: 'Missing term or year' });
+    return;
+  }
+
+  try {
+    const assignments = await sql`
+      SELECT id as assignment_id, class_name, subject_name 
+      FROM grading_assignments
+      WHERE teacher_id = ${id} AND term = ${String(term)} AND year = ${Number(year)}
+    `;
+    res.json(assignments);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch assigned marking.' });
+  }
+});
+
+// GET /api/teachers/:id/assigned-marking/:assignmentId/students - Fetch students for a specific marking assignment
+router.get('/:id/assigned-marking/:assignmentId/students', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id, assignmentId } = req.params;
+  const { examType } = req.query;
+
+  if (req.user?.role !== 'admin' && req.user?.id !== id) {
+    res.status(403).json({ error: 'Access Denied: You are not authorized to access this workspace.' });
+    return;
+  }
+
+  if (!examType) {
+    res.status(400).json({ error: 'Missing examType parameter' });
+    return;
+  }
+
+  try {
+    const [assignment] = await sql`
+      SELECT class_name, subject_name, term, year 
+      FROM grading_assignments WHERE id = ${Number(assignmentId)} AND teacher_id = ${id}
+    `;
+
+    if (!assignment) {
+      res.status(404).json({ error: 'Assignment not found.' });
+      return;
+    }
+
+    const students = await sql`
+      SELECT s.id, s.name, s.stream,
+             m.raw_mark, m.cbc_points, m.cbc_grade, m.verified_by_teacher_id
+      FROM students s
+      LEFT JOIN exam_marks m ON s.id = m.student_id 
+           AND m.subject_name = ${assignment.subject_name} 
+           AND m.exam_type = ${String(examType)} 
+           AND m.term = ${assignment.term} 
+           AND m.year = ${assignment.year}
+      WHERE s.stream = ${assignment.class_name}
+      ORDER BY s.name ASC
+    `;
+
+    res.json(students);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch students for marking.' });
+  }
+});
+
+// POST /api/teachers/:id/confirm-mark - Log a verified mark
+router.post('/:id/confirm-mark', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const { studentId, subjectName, examType, term, year, rawMark } = req.body;
+
+  if (req.user?.role !== 'admin' && req.user?.id !== id) {
+    res.status(403).json({ error: 'Access Denied: You are not authorized to log marks.' });
+    return;
+  }
+
+  if (!studentId || !subjectName || !examType || !term || !year || rawMark === undefined) {
+    res.status(400).json({ error: 'Missing required mark parameters' });
+    return;
+  }
+
+  try {
+    // Check if mark already exists (immutability rule for teachers)
+    const [existingMark] = await sql`
+      SELECT id FROM exam_marks 
+      WHERE student_id = ${studentId} AND subject_name = ${subjectName} 
+      AND exam_type = ${examType} AND term = ${term} AND year = ${year}
+    `;
+
+    if (existingMark && req.user?.role !== 'admin') {
+      res.status(403).json({ error: 'Mark is already confirmed and immutable. Contact Admin to edit.' });
+      return;
+    }
+
+    if (existingMark && req.user?.role === 'admin') {
+      // Admin update
+      await sql`
+        UPDATE exam_marks 
+        SET raw_mark = ${rawMark}
+        WHERE id = ${existingMark.id}
+      `;
+    } else {
+      // Insert new
+      await sql`
+        INSERT INTO exam_marks (student_id, subject_name, exam_type, term, year, raw_mark, verified_by_teacher_id)
+        VALUES (${studentId}, ${subjectName}, ${examType}, ${term}, ${year}, ${rawMark}, ${id})
+      `;
+    }
+
+    res.json({ success: true, message: 'Mark logged successfully.' });
+  } catch (error) {
+    console.error('Error logging mark:', error);
+    res.status(500).json({ error: 'Failed to log mark.' });
+  }
+});
+
 export default router;

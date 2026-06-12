@@ -433,4 +433,173 @@ router.post('/parents/orphan-resolve', async (req: AuthRequest, res: Response): 
   }
 });
 
+// GET /api/admin/grading-eligibility - Fetch qualified teachers excluding the ones who teach the stream
+router.get('/grading-eligibility', async (req: AuthRequest, res: Response): Promise<void> => {
+  const { className, subjectName, term, year } = req.query;
+
+  if (!className || !subjectName || !term || !year) {
+    res.status(400).json({ error: 'Missing required parameters: className, subjectName, term, year' });
+    return;
+  }
+
+  try {
+    const qualifiedTeachers = await sql`
+      SELECT DISTINCT t.id, t.name 
+      FROM teachers t
+      JOIN class_subjects cs ON t.id = cs.teacher_id
+      WHERE cs.subject_name = ${String(subjectName)}
+      AND t.id NOT IN (
+        -- Exclusion 1: Anti-Bias rule (Teacher actually teaches this exact class's subject)
+        SELECT teacher_id FROM class_subjects 
+        WHERE class_name = ${String(className)} AND subject_name = ${String(subjectName)}
+        AND teacher_id IS NOT NULL
+      )
+      AND t.id NOT IN (
+        -- Exclusion 2: Already assigned to mark this specific class/subject this term
+        SELECT teacher_id FROM grading_assignments
+        WHERE class_name = ${String(className)} AND subject_name = ${String(subjectName)} 
+        AND term = ${String(term)} AND year = ${Number(year)}
+      )
+    `;
+
+    res.json(qualifiedTeachers);
+  } catch (error: any) {
+    console.error('Error fetching grading eligibility:', error);
+    res.status(500).json({ error: 'Failed to fetch qualified teachers: ' + error.message });
+  }
+});
+
+// POST /api/admin/grading-assignments - Assign a teacher to mark a class/subject
+router.post('/grading-assignments', async (req: AuthRequest, res: Response): Promise<void> => {
+  const { teacherId, className, subjectName, term, year } = req.body;
+
+  if (!teacherId || !className || !subjectName || !term || !year) {
+    res.status(400).json({ error: 'Missing required assignment data' });
+    return;
+  }
+
+  try {
+    await sql`
+      INSERT INTO grading_assignments (teacher_id, class_name, subject_name, term, year)
+      VALUES (${teacherId}, ${className}, ${subjectName}, ${term}, ${year})
+      ON CONFLICT ON CONSTRAINT unique_assignment DO NOTHING
+    `;
+
+    res.json({ success: true, message: 'Grading assignment created successfully.' });
+  } catch (error: any) {
+    console.error('Error creating grading assignment:', error);
+    res.status(500).json({ error: 'Failed to create grading assignment: ' + error.message });
+  }
+});
+
+// GET /api/admin/grading-assignments - Fetch existing assignments
+router.get('/grading-assignments', async (req: AuthRequest, res: Response): Promise<void> => {
+  const { term, year } = req.query;
+
+  if (!term || !year) {
+    res.status(400).json({ error: 'Missing term or year' });
+    return;
+  }
+
+  try {
+    const assignments = await sql`
+      SELECT ga.id, ga.class_name, ga.subject_name, t.name as teacher_name, t.id as teacher_id
+      FROM grading_assignments ga
+      JOIN teachers t ON ga.teacher_id = t.id
+      WHERE ga.term = ${String(term)} AND ga.year = ${Number(year)}
+      ORDER BY ga.class_name ASC, ga.subject_name ASC
+    `;
+    res.json(assignments);
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to fetch assignments: ' + error.message });
+  }
+});
+
+// GET /api/admin/merit-list - Fetch broadsheet data
+router.get('/merit-list', async (req: AuthRequest, res: Response): Promise<void> => {
+  const { gradePrefix, stream, term, year, examType } = req.query;
+
+  if (!gradePrefix || !term || !year || !examType) {
+    res.status(400).json({ error: 'Missing parameters: gradePrefix, term, year, examType' });
+    return;
+  }
+
+  try {
+    // 1. Fetch students — either specific stream or whole grade
+    const students = stream && String(stream) !== 'all'
+      ? await sql`
+          SELECT s.id, s.name, s.stream
+          FROM students s
+          JOIN classes c ON s.stream = c.name
+          WHERE c.name = ${String(stream)}
+        `
+      : await sql`
+          SELECT s.id, s.name, s.stream
+          FROM students s
+          JOIN classes c ON s.stream = c.name
+          WHERE c.name LIKE ${String(gradePrefix) + '%'}
+        `;
+
+    if (students.length === 0) {
+      res.json([]);
+      return;
+    }
+
+    const studentIds = students.map(s => s.id);
+
+    // 2. Fetch all marks for these students
+    const marks = await sql`
+      SELECT student_id, subject_name, raw_mark, cbc_points, cbc_grade
+      FROM exam_marks
+      WHERE term = ${String(term)} AND year = ${Number(year)} AND exam_type = ${String(examType)}
+      AND student_id = ANY(${studentIds})
+    `;
+
+    // 3. Assemble the broadsheet locally to handle the dynamic subjects
+    const broadsheetMap = new Map();
+
+    students.forEach(student => {
+      broadsheetMap.set(student.id, {
+        id: student.id,
+        name: student.name,
+        stream: student.stream,
+        subjects: {},
+        totalMarks: 0,
+        totalPoints: 0
+      });
+    });
+
+    marks.forEach(mark => {
+      const entry = broadsheetMap.get(mark.student_id);
+      if (entry) {
+        entry.subjects[mark.subject_name] = {
+          marks: mark.raw_mark,
+          points: mark.cbc_points,
+          grade: mark.cbc_grade
+        };
+        entry.totalMarks += mark.raw_mark;
+        entry.totalPoints += mark.cbc_points;
+      }
+    });
+
+    // 4. Calculate Averages and Sort by totalMarks descending to rank them
+    Array.from(broadsheetMap.values()).forEach(entry => {
+      const numSubjects = Object.keys(entry.subjects).length;
+      entry.averageMark = numSubjects > 0 ? (entry.totalMarks / numSubjects).toFixed(2) : '0.00';
+    });
+
+    const meritList = Array.from(broadsheetMap.values()).sort((a, b) => b.totalMarks - a.totalMarks);
+
+    // 5. Add Rank
+    meritList.forEach((item, index) => {
+      item.rank = index + 1;
+    });
+
+    res.json(meritList);
+  } catch (error: any) {
+    console.error('Error fetching merit list:', error);
+    res.status(500).json({ error: 'Failed to generate merit list: ' + error.message });
+  }
+});
+
 export default router;
