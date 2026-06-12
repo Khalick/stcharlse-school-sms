@@ -28,10 +28,16 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers.set('Content-Type', 'application/json');
   }
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
+
   const response = await fetch(`${API_BASE}${endpoint}`, {
     ...options,
-    headers
+    headers,
+    signal: options.signal || controller.signal
   });
+  
+  clearTimeout(timeoutId);
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));

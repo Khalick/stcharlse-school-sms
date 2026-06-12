@@ -552,12 +552,16 @@ router.post('/scan', authenticateToken, async (req: AuthRequest, res: Response):
     try {
       console.log('[OCR] Trying NVIDIA Llama-3.2-11B-Vision...');
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4500);
+
       const nvidiaResp = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${nvidiaKey}`
         },
+        signal: controller.signal,
         body: JSON.stringify({
           model: 'meta/llama-3.2-11b-vision-instruct',
           messages: [
@@ -585,6 +589,7 @@ router.post('/scan', authenticateToken, async (req: AuthRequest, res: Response):
           stream: false
         })
       });
+      clearTimeout(timeoutId);
 
       if (!nvidiaResp.ok) {
         const errTxt = await nvidiaResp.text();

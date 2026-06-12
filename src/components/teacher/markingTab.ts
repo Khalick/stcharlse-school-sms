@@ -1,5 +1,6 @@
 import { apiClient } from '../../data/apiClient';
 import { triggerToastNotification } from '../simulatorBar';
+import { triggerHapticVibration } from '../../lib/audioService';
 
 // ─── MODULE SINGLETONS ────────────────────────────────────
 let persistentStream: MediaStream | null = null;
@@ -256,8 +257,16 @@ function captureProcessed(): string {
 // ─── FUZZY SEARCH ─────────────────────────────────────────
 function fuzzySearch(q: string) {
   const lq = q.toLowerCase().trim();
-  if (lq.length < 2) return [];
+  if (lq.length < 1) return allStudents.filter(s => s.raw_mark === null).slice(0, 5); // Default to next 5 pending
   return allStudents.filter(s => s.raw_mark === null && s.name.toLowerCase().includes(lq)).slice(0, 6);
+}
+
+function resetToIdle() {
+  selectedStudent = null;
+  const input = document.getElementById('student-search') as HTMLInputElement;
+  if (input) input.value = ''; 
+  renderResults(fuzzySearch(''));
+  showOverlay('idle');
 }
 
 function renderResults(results: any[]) {
@@ -300,7 +309,7 @@ function bindAllEvents(teacherId: string) {
   // Start camera
   document.getElementById('btn-start')?.addEventListener('click', async () => {
     const ok = await startCamera();
-    if (ok) showOverlay('idle');
+    if (ok) resetToIdle();
   });
 
   // Search input — 120ms debounce
@@ -321,12 +330,7 @@ function bindAllEvents(teacherId: string) {
 
   // Change student
   document.getElementById('btn-change')?.addEventListener('click', () => {
-    selectedStudent = null;
-    const input = document.getElementById('student-search') as HTMLInputElement;
-    if (input) { input.value = ''; input.focus(); }
-    const box = document.getElementById('search-results');
-    if (box) box.style.display = 'none';
-    showOverlay('idle');
+    resetToIdle();
   });
 
   // Capture
@@ -334,6 +338,7 @@ function bindAllEvents(teacherId: string) {
     if (!selectedStudent) return;
     const base64 = captureProcessed();
     if (!base64) return;
+    triggerHapticVibration([30]); // light tap on capture
 
     const confImg = document.getElementById('conf-img') as HTMLImageElement;
     const confMark = document.getElementById('conf-mark') as HTMLInputElement;
@@ -389,10 +394,10 @@ function bindAllEvents(teacherId: string) {
     const succMsg = document.getElementById('succ-msg');
     if (succMsg) succMsg.textContent = `Logged ${raw} for ${student.name}`;
     showOverlay('success');
-    selectedStudent = null;
-
-    // Reset to idle after 1.5s
-    setTimeout(() => showOverlay('idle'), 1500);
+    triggerHapticVibration([50, 50]); // Double-tap success vibration
+    
+    // Auto-advance to idle and load next students after 1.4s
+    setTimeout(() => resetToIdle(), 1400);
 
     // ── BACKGROUND SAVE ──
     apiClient.post(`/teachers/${teacherId}/confirm-mark`, {

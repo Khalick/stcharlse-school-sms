@@ -73,8 +73,12 @@ export async function renderTeacherPortal(container: HTMLElement): Promise<void>
       return;
     }
     
-    // 3. Fetch students assigned to this workspace stream
-    const streamStudents = await apiClient.get<any[]>(`/teachers/${teacher.id}/students?stream=${encodeURIComponent(activeWorkspace.stream)}`);
+    // 3. Fetch workspace data in parallel (Students, Attendance, Materials)
+    const [streamStudents, registerState, teacherMaterials] = await Promise.all([
+      apiClient.get<any[]>(`/teachers/${teacher.id}/students?stream=${encodeURIComponent(activeWorkspace.stream)}`),
+      apiClient.get<any>(`/attendance/today?teacherId=${teacher.id}&stream=${encodeURIComponent(activeWorkspace.stream)}`),
+      apiClient.get<any[]>(`/materials?authorId=${teacher.id}`)
+    ]);
     
     // Initialize checklist state if empty
     streamStudents.forEach(s => {
@@ -82,8 +86,6 @@ export async function renderTeacherPortal(container: HTMLElement): Promise<void>
       if (!currentEveningAttendance[s.id]) currentEveningAttendance[s.id] = 'present';
     });
     
-    // 4. Query today's register state from the real database (based on target stream)
-    const registerState = await apiClient.get<any>(`/attendance/today?teacherId=${teacher.id}&stream=${encodeURIComponent(activeWorkspace.stream)}`);
     const morningReg = registerState.morning;
     const eveningReg = registerState.evening;
     
@@ -93,9 +95,6 @@ export async function renderTeacherPortal(container: HTMLElement): Promise<void>
     // Check if evening lock is active
     const currentTime = db.simulatedTime;
     const isEveningLockActive = currentTime >= 930 && !isEveningSubmitted && activeWorkspace.type === 'class';
-    
-    // 5. Fetch study materials published by this specific teacher
-    const teacherMaterials = await apiClient.get<any[]>(`/materials?authorId=${teacher.id}`);
 
     // Build Switcher dropdown HTML
     let switcherHtml = '';
