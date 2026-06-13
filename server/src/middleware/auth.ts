@@ -11,6 +11,7 @@ export interface AuthRequest extends Request {
     stream?: string;
     email?: string;
   };
+  file?: any;
 }
 
 export function authenticateToken(req: AuthRequest, res: Response, next: NextFunction): void {
