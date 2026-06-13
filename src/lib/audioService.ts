@@ -159,7 +159,7 @@ export function speakText(text: string, onEnd?: () => void, studentStream?: stri
       'Microsoft Christopher Online'
     ];
 
-    let premiumMaleVoice = null;
+    let premiumMaleVoice: SpeechSynthesisVoice | undefined | null = null;
     
     for (const target of targetVoices) {
       premiumMaleVoice = voices.find(v => v.name.includes(target));
