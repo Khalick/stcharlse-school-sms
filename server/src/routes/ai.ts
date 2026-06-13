@@ -537,86 +537,118 @@ router.post('/generate-image', authenticateToken, async (req: AuthRequest, res: 
   }
 });
 
+let currentNvidiaKeyIndex = 0;
+
 // POST /api/ai/scan
-// Primary: NVIDIA Llama-3.2-11B-Vision (already configured, no billing)
+// Primary: NVIDIA Llama-3.2-11B-Vision with Round-Robin API Key Rotation
 // Fallback: Google Cloud Vision (requires billing enabled on GCP project)
 router.post('/scan', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   const { imageBase64 } = req.body;
   if (!imageBase64) { res.status(400).json({ error: 'Missing imageBase64 data.' }); return; }
 
   const cleanBase64 = imageBase64.replace(/^data:image\/[a-z]+;base64,/, '');
-  const nvidiaKey   = process.env.NVIDIA_API_KEY;
-
-  // ── PRIMARY: NVIDIA Llama-3.2-11B Vision ───────────────────────────────
-  if (nvidiaKey) {
-    try {
-      console.log('[OCR] Trying NVIDIA Llama-3.2-11B-Vision...');
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4500);
-
-      const nvidiaResp = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${nvidiaKey}`
-        },
-        signal: controller.signal,
-        body: JSON.stringify({
-          model: 'meta/llama-3.2-11b-vision-instruct',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are a handwriting OCR assistant for a school exam system. Your ONLY job is to read the handwritten exam mark (a number between 0 and 100) from the image provided. Respond with ONLY the number — no words, no explanation, no units, no punctuation. If you see "78", respond "78". If you cannot read a number, respond "NONE".'
-            },
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: 'What is the handwritten exam mark in this image? Respond with the number only.'
-                },
-                {
-                  type: 'image_url',
-                  image_url: { url: `data:image/jpeg;base64,${cleanBase64}` }
-                }
-              ]
-            }
-          ],
-          max_tokens: 10,
-          temperature: 0,
-          top_p: 1,
-          stream: false
-        })
-      });
-      clearTimeout(timeoutId);
-
-      if (!nvidiaResp.ok) {
-        const errTxt = await nvidiaResp.text();
-        throw new Error(`NVIDIA API ${nvidiaResp.status}: ${errTxt}`);
-      }
-
-      const nvidiaJson = await nvidiaResp.json() as any;
-      const rawAnswer  = (nvidiaJson.choices?.[0]?.message?.content || '').trim();
-      console.log('[OCR] NVIDIA raw answer:', JSON.stringify(rawAnswer));
-
-      if (rawAnswer && rawAnswer !== 'NONE') {
-        const parsed = parseInt(rawAnswer.replace(/[^0-9]/g, ''), 10);
-        if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
-          console.log('[OCR] ✅ NVIDIA detected mark:', parsed);
-          res.json({ detectedMark: parsed, rawText: rawAnswer, engine: 'nvidia-llama-vision' });
-          return;
-        }
-      }
-
-      // Model said NONE or gave something unreadable
-      console.log('[OCR] NVIDIA could not read a number. Mark null.');
-      res.json({ detectedMark: null, rawText: rawAnswer, engine: 'nvidia-llama-vision' });
-      return;
-
-    } catch (nvidiaErr: any) {
-      console.warn('[OCR] NVIDIA failed, trying Google Vision fallback:', nvidiaErr.message);
+  
+  // Parse NVIDIA keys from both NVIDIA_API_KEYS (comma separated) AND NVIDIA_API_KEY
+  let nvidiaKeys: string[] = [];
+  
+  if (process.env.NVIDIA_API_KEYS) {
+    nvidiaKeys.push(...process.env.NVIDIA_API_KEYS.split(',').map(k => k.trim()).filter(k => k));
+  }
+  
+  if (process.env.NVIDIA_API_KEY) {
+    const singleKey = process.env.NVIDIA_API_KEY.trim();
+    if (singleKey && !nvidiaKeys.includes(singleKey)) {
+      nvidiaKeys.push(singleKey);
     }
+  }
+
+  // ── PRIMARY: NVIDIA Llama-3.2-11B Vision (With Key Rotation / Retry Pool) ──
+  if (nvidiaKeys.length > 0) {
+    let success = false;
+    let attempts = 0;
+    const maxAttempts = Math.min(nvidiaKeys.length, 3); // Try at most 3 keys per scan to avoid long hangs
+
+    while (attempts < maxAttempts && !success) {
+      const activeKey = nvidiaKeys[currentNvidiaKeyIndex % nvidiaKeys.length];
+      
+      try {
+        console.log(`[OCR] Trying NVIDIA Llama-3.2-11B-Vision... (Key Index: ${currentNvidiaKeyIndex % nvidiaKeys.length}, Attempt ${attempts + 1}/${maxAttempts})`);
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4500);
+
+        const nvidiaResp = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${activeKey}`
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            model: 'meta/llama-3.2-11b-vision-instruct',
+            messages: [
+              {
+                role: 'system',
+                content: 'You are a handwriting OCR assistant for a school exam system. Your ONLY job is to read the handwritten exam mark (a number between 0 and 100) from the image provided. Respond with ONLY the number — no words, no explanation, no units, no punctuation. If you see "78", respond "78". If you cannot read a number, respond "NONE".'
+              },
+              {
+                role: 'user',
+                content: [
+                  {
+                    type: 'text',
+                    text: 'What is the handwritten exam mark in this image? Respond with the number only.'
+                  },
+                  {
+                    type: 'image_url',
+                    image_url: { url: `data:image/jpeg;base64,${cleanBase64}` }
+                  }
+                ]
+              }
+            ],
+            max_tokens: 10,
+            temperature: 0,
+            top_p: 1,
+            stream: false
+          })
+        });
+        clearTimeout(timeoutId);
+
+        if (!nvidiaResp.ok) {
+          const errTxt = await nvidiaResp.text();
+          throw new Error(`NVIDIA API ${nvidiaResp.status}: ${errTxt}`);
+        }
+
+        const nvidiaJson = await nvidiaResp.json() as any;
+        const rawAnswer  = (nvidiaJson.choices?.[0]?.message?.content || '').trim();
+
+        if (rawAnswer && rawAnswer !== 'NONE') {
+          const parsed = parseInt(rawAnswer.replace(/[^0-9]/g, ''), 10);
+          if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
+            console.log('[OCR] ✅ NVIDIA detected mark:', parsed);
+            res.json({ detectedMark: parsed, rawText: rawAnswer, engine: 'nvidia-llama-vision' });
+            
+            // Success! Advance index for the next request (Load balancing)
+            currentNvidiaKeyIndex++;
+            return;
+          }
+        }
+
+        // Model said NONE or gave something unreadable
+        console.log('[OCR] NVIDIA could not read a number. Mark null.');
+        res.json({ detectedMark: null, rawText: rawAnswer, engine: 'nvidia-llama-vision' });
+        
+        // Success (API responded properly), advance index
+        currentNvidiaKeyIndex++;
+        return;
+
+      } catch (nvidiaErr: any) {
+        console.warn(`[OCR] ⚠ NVIDIA Key ${currentNvidiaKeyIndex % nvidiaKeys.length} failed/timeout:`, nvidiaErr.message);
+        // Rate limit hit or timeout. Switch to next key and loop again.
+        currentNvidiaKeyIndex++;
+        attempts++;
+      }
+    }
+    console.warn('[OCR] All NVIDIA attempts failed, trying Google Vision fallback...');
   }
 
   // ── FALLBACK: Google Cloud Vision ──────────────────────────────────────

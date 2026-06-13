@@ -2,6 +2,7 @@ import { triggerToastNotification } from '../simulatorBar';
 import { SCHOOL_STREAMS } from '../../lib/constants';
 import { apiClient } from '../../data/apiClient';
 import { getDb } from '../../data/mockDb';
+import { downloadAsCSV } from '../../lib/exportUtils';
 
 
 let searchQuery = '';
@@ -70,8 +71,13 @@ export async function renderStudentsTab(container: HTMLElement, streamFilter?: s
   }
 
   container.innerHTML = `
-    <div class="card-header-with-action"><h2 class="card-title">${isTeacher ? 'Class Students Roster' : 'Student Directory'}</h2>
-      ${isReadOnlyWorkspace ? '' : '<button class="btn-accent" id="btn-open-admission">Register New Student</button>'}</div>
+    <div class="card-header-with-action">
+      <h2 class="card-title">${isTeacher ? 'Class Students Roster' : 'Student Directory'}</h2>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-secondary" id="btn-export-students">⬇ Export CSV</button>
+        ${isReadOnlyWorkspace ? '' : '<button class="btn-accent" id="btn-open-admission">Register New Student</button>'}
+      </div>
+    </div>
     <div class="search-bar-container" style="display:flex; gap:12px;">
       ${!isTeacher ? `
         <select id="admin-stream-filter" class="form-control" style="width:200px; font-family:inherit;">
@@ -101,6 +107,11 @@ export async function renderStudentsTab(container: HTMLElement, streamFilter?: s
       renderStudentsTab(container, streamFilter, forceReadOnly);
     });
   }
+
+  // Export CSV
+  container.querySelector('#btn-export-students')?.addEventListener('click', () => {
+    downloadAsCSV(students, 'student_directory.csv');
+  });
 
   // Admit
   container.querySelector('#btn-open-admission')?.addEventListener('click', () => showStudentModal(container, null, streamFilter));

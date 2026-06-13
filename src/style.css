@@ -949,3 +949,104 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 @media (max-width: 768px) {
   #scan-reticle { height: 140px !important; }
 }
+
+/* ═══ MOBILE UI UX ARCHITECTURE ═══ */
+
+@media (max-width: 768px) {
+  /* Mobile Bottom Navigation */
+  .mobile-bottom-nav {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid var(--border);
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 999;
+    padding: 10px 5px;
+    padding-bottom: env(safe-area-inset-bottom, 10px); /* iPhone X notch support */
+    box-shadow: 0 -4px 15px rgba(0,0,0,0.05);
+  }
+  .mobile-bottom-nav .admin-tab-btn {
+    flex-direction: column;
+    border: none !important;
+    background: transparent !important;
+    font-size: 0.7rem;
+    padding: 4px;
+    color: var(--text-muted);
+    gap: 4px;
+    min-height: auto;
+  }
+  .mobile-bottom-nav .admin-tab-btn.active {
+    color: var(--primary);
+    font-weight: 700;
+  }
+  .mobile-bottom-nav .admin-tab-btn::before {
+    content: '';
+    display: block;
+    font-size: 1.2rem;
+    margin-bottom: 2px;
+  }
+  .mobile-bottom-nav .admin-tab-btn[data-tab="analytics"]::before { content: '📊'; }
+  .mobile-bottom-nav .admin-tab-btn[data-tab="reports"]::before { content: '📄'; }
+  .mobile-bottom-nav .admin-tab-btn[data-tab="marking"]::before { content: '📷'; }
+}
+
+/* Floating Action Button (FAB) */
+.fab-btn {
+  position: fixed;
+  bottom: 85px; /* Above the bottom nav */
+  right: 20px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  box-shadow: 0 6px 15px rgba(10, 29, 55, 0.3);
+  font-size: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 998;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+.fab-btn:active { transform: scale(0.92); }
+
+/* Swipe Carousel */
+.swipe-carousel {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 10px;
+}
+.swipe-carousel::-webkit-scrollbar { display: none; }
+.swipe-carousel > * {
+  scroll-snap-align: center;
+  flex: 0 0 85%; /* Shows a peek of the next card */
+}
+
+/* Mobile Adjustments for Attendance Rows */
+@media (max-width: 768px) {
+  .register-row {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px;
+    gap: 10px;
+  }
+  .attendance-toggle-grp {
+    width: 100%;
+    justify-content: stretch;
+  }
+  .attendance-toggle-btn {
+    flex: 1; /* Stretch buttons evenly */
+    text-align: center;
+  }
+}

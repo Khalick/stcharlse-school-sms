@@ -122,7 +122,7 @@ export async function renderTeacherPortal(container: HTMLElement): Promise<void>
       </div>
 
       <!-- Workspace Tab Selector -->
-      <div class="admin-tabs">
+      <div class="admin-tabs mobile-bottom-nav">
         <!-- HIDDEN (focus mode): Attendance Registers, Students Roster, Study Resources -->
         <button class="admin-tab-btn ${activeTeacherTab === 'analytics' ? 'active' : ''}" data-tab="analytics">Student Analytics</button>
         <button class="admin-tab-btn ${activeTeacherTab === 'reports' ? 'active' : ''}" data-tab="reports">Report Cards</button>
@@ -162,7 +162,7 @@ export async function renderTeacherPortal(container: HTMLElement): Promise<void>
         `;
       } else {
         tabPanel.innerHTML = `
-          <div class="dashboard-grid" style="margin-top: 0;">
+          <div class="dashboard-grid swipe-carousel" style="margin-top: 0;">
             <!-- Twice-Daily Attendance: Morning Check-In -->
             <section class="card col-6 relative-card">
               <h2 class="card-title" style="margin-bottom:12px;">Morning Check-In Register</h2>

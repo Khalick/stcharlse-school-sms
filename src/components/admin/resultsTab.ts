@@ -1,6 +1,7 @@
 import { apiClient } from '../../data/apiClient';
 import { triggerToastNotification } from '../simulatorBar';
 import { getSubjectsForGrade, SCHOOL_STREAMS } from '../../lib/constants';
+import { downloadAsCSV } from '../../lib/exportUtils';
 
 // Maps grade number to the streams that belong to it
 const GRADE_STREAMS: Record<string, string[]> = {
@@ -94,6 +95,7 @@ export async function renderResultsTab(container: HTMLElement): Promise<void> {
                 </select>
               </div>
               <button id="btn-refresh-merit" class="btn-outline" style="height:38px;">↻ Refresh</button>
+              <button id="btn-export-merit" class="btn-secondary" style="height:38px; display:none;">⬇ Export CSV</button>
             </div>
           </div>
 
@@ -369,12 +371,40 @@ export async function renderResultsTab(container: HTMLElement): Promise<void> {
           : [...data].sort((a, b) => { if (a.stream < b.stream) return -1; if (a.stream > b.stream) return 1; return a.name.localeCompare(b.name); });
 
         meritContainer.innerHTML = renderBroadsheet(sorted, currentBroadsheetSubjects, isCBCGrade);
+        
+        // Show export button now that we have data
+        const exportBtn = document.getElementById('btn-export-merit');
+        if (exportBtn) exportBtn.style.display = 'inline-block';
+        
       } catch (e: any) {
         meritContainer.innerHTML = `<div style="color:red; padding:20px;">Error generating broadsheet: ${e.message}</div>`;
       }
     };
 
     document.getElementById('btn-refresh-merit')?.addEventListener('click', loadBroadsheet);
+    
+    // Export CSV Listener
+    document.getElementById('btn-export-merit')?.addEventListener('click', () => {
+      // Flatten the subjects object for CSV
+      const flattenedData = currentBroadsheetData.map(row => {
+        const flatRow: any = {
+          Rank: row.rank,
+          Name: row.name,
+          Stream: row.stream,
+          'Total Marks': row.totalMarks,
+          'Average Mark': row.averageMark || '0.0',
+        };
+        if (isCBCGrade) flatRow['Total Points'] = row.totalPoints;
+        
+        currentBroadsheetSubjects.forEach(subj => {
+          flatRow[subj] = row.subjects[subj] ? row.subjects[subj].marks : '-';
+        });
+        return flatRow;
+      });
+      
+      const grade = (document.getElementById('merit-grade-filter') as HTMLSelectElement)?.value || 'Grade';
+      downloadAsCSV(flattenedData, `${grade.replace(' ', '_')}_Broadsheet_${term.replace(' ', '')}_${year}.csv`);
+    });
 
     // Tab switching
     document.getElementById('tab-stream-merit')?.addEventListener('click', () => {
